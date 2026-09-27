@@ -1,0 +1,17 @@
+[project]
+name = "infrastructure-telemetry"
+version = "0.0.0"
+description = "Energy fleet reliability pipeline (see README.md and CLAUDE.md)."
+requires-python = ">=3.11"
+# Local dev note: this repo targets Python 3.11+ (see CLAUDE.md "Stack"). If your local
+# interpreter is older, pytest will generally still run the test suite as-is; treat 3.11+ as
+# a hard requirement only once packages/dependencies are added that need it.
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+addopts = "-ra -q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

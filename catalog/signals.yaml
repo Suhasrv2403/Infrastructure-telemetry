@@ -1,0 +1,25 @@
+# Canonical signal catalog (schema skeleton - not yet populated/reviewed, see P0-10).
+#
+# Structure:
+#   <device_class>:
+#     <firmware_version>:
+#       <raw_field_name>:
+#         canonical_name: <string>   # stable name used from Stage 2 onward
+#         unit: <string>             # SI unit, or "enum"/"bool"/"count" for non-physical fields
+#         type: <float|int|bool|enum|string>
+#         description: <string>      # semantics, as confirmed with firmware SME
+#         valid_range: [min, max]    # optional, used by row-level quality flags (P1-10)
+#
+# Every entry must be reviewed by a firmware SME before it's treated as canonical (see
+# Build backlog.md, P0-10 "Done when").
+
+supercharger_stall:
+  example_firmware_1_0_0:
+    pack_current_raw:
+      canonical_name: output_current_amps
+      unit: A
+      type: float
+      description: >
+        EXAMPLE ENTRY ONLY. Measured output current at the stall connector. Replace with
+        reviewed fields once P0-10 closes.
+      valid_range: [0, 500]
