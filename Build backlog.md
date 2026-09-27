@@ -1,0 +1,114 @@
+# Build backlog
+
+The build is 64 epic-sized tickets across 5 phases, about 140 focused engineer-weeks; each ticket should be split into 1–3 day stories at sprint planning.
+
+**Conventions**
+
+- **ID:** phase and sequence, e.g. P1-06. Gate reviews close each phase.
+- **Component:** INGEST (buffer, ingest service), S0–S4 (pipeline stages), DET (detectors), TH (telemetry health), PLAT (infra, orchestration, observability), GOV (privacy, security), UI (dashboards), DISC (discovery).
+- **Owner level:** who should lead the ticket. Juniors always pair with a named senior reviewer.
+- **Estimate:** focused engineer-weeks. Plan calendar time at 1.5–2x for reviews, on-call and meetings.
+- **Done when:** the acceptance check that closes the ticket; every ticket also needs tests, a design note if it changes a table's grain, and monitoring if it runs in production.
+
+**Capacity check:** \~140 focused engineer-weeks, or 210–280 calendar-adjusted, against \~11 engineers over 12 months. That leaves room for unplanned work, which Phase 0 findings will almost certainly create.
+
+## Phase 0 · Discover and capture (months 0–2)
+
+13 tickets, \~26 engineer-weeks. Goal: replace assumptions with measurements before locking storage and grain decisions.
+
+| ID | Ticket | Component | Owner level | Est. (wk) | Depends on | Done when | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| P0-01 | Audit existing telemetry backend and data flows | DISC | Staff | 2 | — | Written map of sources, formats, retention and known drops | To do |
+| P0-02 | Cloud accounts, IaC baseline, networking, IAM | PLAT | Senior SRE | 2 | — | Dev, staging, prod created from Terraform | To do |
+| P0-03 | Object store layout and Iceberg catalog | PLAT | Senior | 1.5 | P0-02 | Buckets, catalog and naming conventions documented and live | To do |
+| P0-04 | Deploy orchestrator (Dagster) with partition model | PLAT | Senior | 2 | P0-02 | A partitioned asset runs and backfills in staging | To do |
+| P0-05 | Stage 0 capture for one Supercharger region | S0 | Senior | 3 | P0-03 | Raw messages land by arrival hour; counts reconcile with source | To do |
+| P0-06 | Arrival-shape profiler | DISC | Senior | 1.5 | P0-05 | Report: protocol, batching, message sizes per class and firmware | To do |
+| P0-07 | Timestamp and clock-quality profiler | DISC | Senior | 1.5 | P0-05 | Missing, epoch-default, future and drift rates per firmware | To do |
+| P0-08 | Lateness and duplicate profiler | DISC | Senior | 1.5 | P0-05 | Lateness distribution and duplicate rate per class | To do |
+| P0-09 | Device retry-behavior test with fault injection | DISC | Senior SRE + firmware | 2 | P0-05 | Retry, buffer or drop behavior documented per firmware | To do |
+| P0-10 | Signal catalog v0 (top 3 firmware per class) | S2 | Senior + firmware SME | 3 | P0-06 | Canonical names, units, semantics reviewed by firmware | To do |
+| P0-11 | Access to RMA, tickets, dispatch, outage, provisioning data | DISC | EM + senior DS | 3 | — | Read access granted; sample extracts loaded | To do |
+| P0-12 | Privacy and security review kickoff | GOV | EM | 2 | — | Data classification drafted; residential and utility-site reviews booked | To do |
+| P0-13 | Profiling report and design lock | DISC | Staff | 1 | P0-06–10 | Lateness horizon, grains and firmware asks signed off (Gate 0) | To do |
+
+## Phase 1 · Core pipeline, Supercharger pilot (months 2–5)
+
+16 tickets, \~32 engineer-weeks. Goal: Stages 0–2 in production for stalls and cabinets, with dedup, late data and replay proven.
+
+| ID | Ticket | Component | Owner level | Est. (wk) | Depends on | Done when | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| P1-01 | Production ingest buffer with accept-and-spool | INGEST | Senior | 3 | P0-13 | Load test at 10x current Supercharger rate with zero loss | To do |
+| P1-02 | Stage 0 compaction and retention tiering | S0 | Mid | 1 | P1-01 | Hourly compaction; 30-day hot then archive lifecycle active | To do |
+| P1-03 | Parser framework with versioned per-firmware parsers | S1 | Senior | 3 | P0-10 | Parsers registered by firmware; unknown formats routed to quarantine | To do |
+| P1-04 | Supercharger stall and cabinet parsers | S1 | Mid | 2 | P1-03 | Top firmware versions parse with fixture tests from real payloads | To do |
+| P1-05 | Timestamp sanity checks and quarantine table | S1 | Mid | 1.5 | P1-03 | Epoch, future and implausible times quarantined with reason codes | To do |
+| P1-06 | Idempotent merge on natural key into event-time partitions | S1 | Senior | 2 | P1-03 | Replaying a message N times yields exactly one row | To do |
+| P1-07 | Dirty-keys table from incremental changes | PLAT | Senior | 2 | P1-06 | Every late merge records its (device, hour) keys | To do |
+| P1-08 | Stage 2 canonicalization via signal catalog | S2 | Senior | 2.5 | P1-04 | Canonical names, types and units for all pilot signals | To do |
+| P1-09 | Per-device clock offset and corrected event time | S2 | Senior | 2 | P1-08 | Offset estimates stored; corrected time within agreed tolerance on test set | To do |
+| P1-10 | Row-level quality flags (range, stuck, counter reset, jumps) | S2 | Junior (paired) | 2 | P1-08 | Flags populated; no rows deleted; flag rates on dashboard | To do |
+| P1-11 | Completeness and lateness sidecar (device × hour) | TH | Mid | 2.5 | P1-08 | Expected, on-time, late, missing counts per device-hour | To do |
+| P1-12 | Last-seen snapshot and silence-episode job | TH | Mid | 2 | P1-01 | Runs every 15 min; opens and closes episodes with cause field | To do |
+| P1-13 | Targeted Stage 2 recompute from dirty keys | PLAT | Senior | 2 | P1-07 | Late data recomputes only touched device-hours | To do |
+| P1-14 | Replay-from-Stage-0 determinism test | PLAT | Mid | 1.5 | P1-13 | Rebuild of a closed window matches production exactly | To do |
+| P1-15 | Pipeline observability: freshness, completeness, cost | PLAT | Senior SRE | 2 | P1-01 | Dashboards and alerts live; watchdog runs outside orchestrator | To do |
+| P1-16 | Late-data backfill end-to-end test and runbook | PLAT | Junior + senior | 1 | P1-13 | Simulated 72 h outage backfill lands correctly (Gate 1) | To do |
+
+## Phase 2 · Enrich and detect, add Megapack (months 4–8)
+
+15 tickets, \~38 engineer-weeks. Goal: Stage 3 tables and the first credible detectors, with Megapack and Powerpack onboarded.
+
+| ID | Ticket | Component | Owner level | Est. (wk) | Depends on | Done when | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| P2-01 | Device history dimension (firmware, hardware rev, cell lot, site, climate) | S3 | Mid | 3 | P0-11 | As-of joins return the firmware a device ran at any timestamp | To do |
+| P2-02 | Ingest external sources: dispatch, outages, weather, RMA and tickets | S3 | Mid | 3 | P0-11 | Daily loads with freshness checks | To do |
+| P2-03 | Stage 3a time grid (5-min / 1-min) with coverage and mode labels | S3 | Senior | 3 | P1-13 | Grid rebuilt incrementally from dirty keys | To do |
+| P2-04 | Event detection and event table (sessions, dispatch, outages) | S3 | Senior + DS | 3 | P2-02 | Events reconcile with session logs and dispatch records | To do |
+| P2-05 | Device-day feature table | S3 | Mid | 2 | P2-03 | Features for all pilot devices, recomputed on late data | To do |
+| P2-06 | Detector plugin framework and findings schema | DET | Senior DS + senior | 3 | P2-03 | Detectors declared in config; findings carry version, evidence, quality | To do |
+| P2-07 | Cohort-day statistics (median, MAD, rates) | S4 | Mid DS | 2 | P2-01 | Reference stats per cohort per day | To do |
+| P2-08 | Rule detectors v1 (session failures, derates, module faults, thermal) | DET | Mid | 2 | P2-06 | Rules live with thresholds reviewed by charger SMEs | To do |
+| P2-09 | Cohort outlier detectors (robust z by firmware, hardware, site) | DET | Senior DS | 2 | P2-07 | Outliers flagged with peer comparison as evidence | To do |
+| P2-10 | Telemetry-health detectors (correlated vs isolated dropout) | TH | Mid DS | 2 | P1-12 | Dropout attributed by firmware, region, carrier where known | To do |
+| P2-11 | Provisional-to-final window lifecycle and finding versions | S4 | Senior | 2 | P2-06 | Windows finalize after horizon; revisions recorded, never overwritten | To do |
+| P2-12 | Backtest harness against RMA and tickets | DET | Senior DS | 3 | P2-06 | Precision and lead time reported per detector version | To do |
+| P2-13 | Megapack and Powerpack parsers, incl. cell-level child table | S1 | Mid + junior | 3 | P1-03 | Top firmware versions parse; cell table partitioned and compacted | To do |
+| P2-14 | Megapack and Powerpack onboarding | S2 | Senior | 2 | P2-13 | Catalog, completeness expectations and capacity signed off | To do |
+| P2-15 | Battery detectors v1 (cell imbalance, capacity fade, dispatch under-delivery) | DET | Senior DS | 3 | P2-14 | Backtested; reviewed by battery SMEs (Gate 2) | To do |
+
+## Phase 3 · Powerwall at scale, dashboards (months 7–11)
+
+12 tickets, \~31 engineer-weeks. Goal: all 1M Powerwalls onboarded safely, and findings reaching the people who act on them.
+
+| ID | Ticket | Component | Owner level | Est. (wk) | Depends on | Done when | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| P3-01 | Ingest capacity plan and autoscaling for Powerwall | INGEST | Senior SRE | 2 | P1-01 | Scaling policy sized from measured peak and surge rates | To do |
+| P3-02 | 10x reconnection surge load test | INGEST | Senior SRE + senior | 2 | P3-01 | Synthetic 72 h regional backfill ingested with zero loss | To do |
+| P3-03 | Powerwall parsers and signal catalog | S1 | Mid + junior | 3 | P1-03 | Top firmware versions parse; catalog reviewed by firmware | To do |
+| P3-04 | Staged Powerwall rollout (1% → 10% → 100%) | S0 | Senior | 4 | P3-02 | Each stage holds SLOs for a week before the next | To do |
+| P3-05 | Mode-aware expected counts from outage and VPP records | TH | Mid DS | 2 | P2-02 | Completeness uses event-mode expectations; lower bound otherwise | To do |
+| P3-06 | Scheduled reconciliation for cross-device outputs | PLAT | Senior | 2 | P2-11 | Cohort and mart recompute bounded in cost after an outage | To do |
+| P3-07 | Stage 4 fleet health marts | S4 | Mid analytics | 3 | P2-11 | Region, site, class × day marts; dashboards never scan Stage 3 | To do |
+| P3-08 | Device health snapshot table | S4 | Mid analytics | 1.5 | P3-07 | One row per device with score, open findings, last seen | To do |
+| P3-09 | Dashboards: fleet, cohort, site, telemetry health | UI | Mid analytics + junior | 3 | P3-07 | Used in weekly ops review | To do |
+| P3-10 | Alert routing to NOC and support queues | S4 | Senior | 3 | P2-11 | Dedup and suppression live; utility-site findings reach ops | To do |
+| P3-11 | Lifetime table and survival analysis by cohort | DET | Senior DS | 3 | P2-12 | Failure curves per cohort; silence treated as censored | To do |
+| P3-12 | Privacy controls for residential data | GOV | Senior + SRE | 2 | P0-12 | Access tiers, retention limits and aggregation approved (Gate 3) | To do |
+
+## Phase 4 · Harden and hand off (months 10–12)
+
+8 tickets, \~14 engineer-weeks. Goal: a pipeline that runs on SLOs and runbooks, plus the evidence-backed firmware asks for year 2.
+
+| ID | Ticket | Component | Owner level | Est. (wk) | Depends on | Done when | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| P4-01 | SLOs and error budgets per device class | PLAT | Senior SRE | 1 | P1-15 | SLOs published with error-budget alerts | To do |
+| P4-02 | Runbooks and game day | PLAT | Senior SRE + team | 2 | P4-01 | Ingest outage, bad parse and mass backfill drills passed | To do |
+| P4-03 | On-call rotation and escalation paths | PLAT | EM | 1 | P4-02 | Rotation staffed; escalation to firmware and ops agreed | To do |
+| P4-04 | Cost optimization pass | PLAT | Senior | 2 | P3-04 | Cost per device at or below target | To do |
+| P4-05 | Firmware requirements from measured blind spots | DISC | Staff | 2 | P3-05 | Ranked asks (sequence numbers, buffering, profiles) with data | To do |
+| P4-06 | Detector precision review and tuning with SMEs | DET | Senior DS | 2 | P2-12 | High-severity precision at or above target | To do |
+| P4-07 | Year-2 ML detector scoping | DET | Mid DS | 2 | P4-06 | Proposal with features, labels and backtest plan | To do |
+| P4-08 | Consumer documentation and onboarding guide | UI | Mid analytics + junior | 1.5 | P3-09 | Table and dashboard docs published (Gate 4) | To do |
+
+**Critical path:** P0-05 → P0-13 → P1-03 → P1-06 → P1-07 → P1-13 → P2-03 → P2-06 → P2-11 → P3-06 → P3-04. Slips in dedup and dirty-key recompute delay everything downstream, so staff those tickets with the strongest seniors.
