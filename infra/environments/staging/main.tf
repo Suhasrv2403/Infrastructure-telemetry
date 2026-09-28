@@ -21,10 +21,12 @@ provider "aws" {
   skip_requesting_account_id  = true
 
   endpoints {
-    s3  = var.use_local_stack ? var.cloud_endpoints.s3 : null
-    iam = var.use_local_stack ? var.cloud_endpoints.iam : null
-    sts = var.use_local_stack ? var.cloud_endpoints.sts : null
-    ec2 = var.use_local_stack ? var.cloud_endpoints.ec2 : null
+    s3   = var.use_local_stack ? var.cloud_endpoints.s3 : null
+    iam  = var.use_local_stack ? var.cloud_endpoints.iam : null
+    sts  = var.use_local_stack ? var.cloud_endpoints.sts : null
+    ec2  = var.use_local_stack ? var.cloud_endpoints.ec2 : null
+    kms  = var.use_local_stack ? var.cloud_endpoints.kms : null
+    logs = var.use_local_stack ? var.cloud_endpoints.logs : null
   }
 }
 

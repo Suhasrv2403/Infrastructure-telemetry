@@ -31,19 +31,26 @@ variable "cloud_endpoints" {
     Per-service endpoint overrides - this is the dependency-injection point: modules and this
     root module never hardcode which cloud they're talking to, only this variable does.
     Defaults target LocalStack's single edge port (4566, used for every service in modern
-    LocalStack). Ignored when use_local_stack = false (the real provider defaults apply).
+    LocalStack). Every service any module in this repo actually calls must be listed here -
+    kms and logs were added after the flow-log KMS key and log group were caught hitting real
+    AWS during testing because they weren't overridden. Ignored when use_local_stack = false
+    (the real provider defaults apply).
   EOT
   type = object({
-    s3  = optional(string)
-    iam = optional(string)
-    sts = optional(string)
-    ec2 = optional(string)
+    s3   = optional(string)
+    iam  = optional(string)
+    sts  = optional(string)
+    ec2  = optional(string)
+    kms  = optional(string)
+    logs = optional(string)
   })
   default = {
-    s3  = "http://localhost:4566"
-    iam = "http://localhost:4566"
-    sts = "http://localhost:4566"
-    ec2 = "http://localhost:4566"
+    s3   = "http://localhost:4566"
+    iam  = "http://localhost:4566"
+    sts  = "http://localhost:4566"
+    ec2  = "http://localhost:4566"
+    kms  = "http://localhost:4566"
+    logs = "http://localhost:4566"
   }
 }
 
