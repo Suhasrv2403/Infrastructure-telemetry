@@ -1,11 +1,15 @@
 """Tests for the parser framework (P1-03: "Parser framework with versioned per-firmware
 parsers").
 
-Covers the registry/dispatch/quarantine machinery in parsers/framework.py, plus its one
-demonstration parser (parsers/supercharger_stall/firmware_2_1_4.py). Real per-firmware parser
-coverage is P1-04 - these tests only need to prove the framework works end to end, not that
-every firmware/device-class combination has a real parser (the opposite, in fact: everything
-except supercharger_stall/2.1.4 must land in quarantine).
+Covers the registry/dispatch/quarantine machinery in parsers/framework.py, plus the
+supercharger_stall/2.1.4 parser it was originally proven against. Full per-firmware parser
+coverage for every (device_class, firmware_version) pair in
+tests/fixtures/generators/supercharger.py's DEFAULT_FIRMWARE (P1-04) is covered separately in
+tests/unit/test_supercharger_parsers.py, including the "zero messages quarantined across the
+full synthetic generator output" check. These tests only need to prove the framework's
+registry/dispatch/quarantine machinery itself works end to end - including that a genuinely
+unregistered (device_class, firmware_version) pair still lands in quarantine rather than being
+silently dropped or force-parsed.
 """
 from __future__ import annotations
 
@@ -27,7 +31,6 @@ from parsers.framework import (
 # "2.1.4") decorator, populating the framework's global registry - exactly like any other
 # caller of parse_messages() would rely on.
 from parsers.supercharger_stall.firmware_2_1_4 import parse_supercharger_stall_2_1_4  # noqa: F401
-from tests.fixtures.generators.supercharger import GeneratorConfig, generate
 
 
 def _sample_stall_message(**overrides) -> dict:
@@ -76,6 +79,7 @@ def test_registered_parser_produces_one_row_per_reading_with_field_passthrough()
     assert row["device_class"] == message["device_class"]
     assert row["firmware_version"] == message["firmware_version"]
     assert row["site_id"] == message["site_id"]
+    assert row["arrival_ts_ms"] == message["arrival_ts_ms"]
     for field in (
         "output_current_a",
         "output_voltage_v",
@@ -93,6 +97,9 @@ def test_registered_parser_produces_one_row_per_reading_with_field_passthrough()
 
 
 def test_unregistered_pair_is_quarantined_with_reason_naming_the_pair():
+    """A genuinely unknown firmware version (not in DEFAULT_FIRMWARE) must still be
+    quarantined, never guessed at by a fallback parser - this is the invariant P1-04's full
+    coverage of DEFAULT_FIRMWARE does NOT relax."""
     message = _sample_stall_message(firmware_version="9.9.9")
     original = copy.deepcopy(message)
 
@@ -165,54 +172,3 @@ def test_register_parser_rejects_duplicate_registration():
     register_parser("fake_device", "dup", registry=local_registry)(lambda message: [])
     with pytest.raises(DuplicateParserError):
         register_parser("fake_device", "dup", registry=local_registry)(lambda message: [])
-
-
-def test_full_generator_output_only_stall_2_1_4_parses_rest_quarantined():
-    """The actual P1-03 "done when" check: run the full synthetic generator output through the
-    framework and confirm only (supercharger_stall, 2.1.4) - the one registered demo parser -
-    produces rows, while every other (device_class, firmware_version) combination is
-    quarantined, and nothing is silently dropped."""
-    fixtures = generate(GeneratorConfig(devices_per_firmware=2))
-    messages = list(fixtures.all_messages())
-    assert messages, "fixture generator produced no messages to dispatch"
-
-    result = parse_messages(messages)
-
-    assert result.messages_seen == len(messages)
-    assert result.reconciles()
-    assert result.rows_parsed > 0
-
-    registered_pair = ("supercharger_stall", "2.1.4")
-    expected_parsed = sum(
-        1
-        for m in messages
-        if (m["device_class"], m["firmware_version"]) == registered_pair
-    )
-    expected_quarantined = len(messages) - expected_parsed
-    assert expected_parsed > 0, "fixture generator must include the registered demo pair"
-    assert expected_quarantined > 0, "fixture generator must include unregistered pairs too"
-
-    assert result.messages_parsed == expected_parsed
-    assert result.messages_quarantined == expected_quarantined
-
-    quarantined_pairs = {
-        (q.message["device_class"], q.message["firmware_version"]) for q in result.quarantined
-    }
-    assert registered_pair not in quarantined_pairs
-    assert quarantined_pairs == {
-        ("supercharger_stall", "2.3.0"),
-        ("supercharger_stall", "3.0.1"),
-        ("supercharger_cabinet", "1.8.2"),
-        ("supercharger_cabinet", "1.9.0"),
-    }
-
-    # Every quarantined record must carry its original message verbatim and a reason naming
-    # the (device_class, firmware_version) pair that had no parser.
-    for q in result.quarantined:
-        assert q.reason.startswith("no_parser_registered_for_")
-        assert q.message["device_class"] in q.reason or q.message["firmware_version"] in q.reason
-
-    # Every row produced must come from a stall/2.1.4 message and carry that identity through.
-    for row in result.rows:
-        assert row["device_class"] == "supercharger_stall"
-        assert row["firmware_version"] == "2.1.4"
