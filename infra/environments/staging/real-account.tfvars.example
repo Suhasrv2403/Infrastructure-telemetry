@@ -1,0 +1,13 @@
+# Example for pointing staging at a REAL (non-production) AWS account.
+#
+# Do this ONLY after the human review docs/KICKOFF.md calls for ("stop and report before
+# anything touches a real account") and after P0-02's plan has been reviewed. Copy this file
+# to real-account.tfvars (already .gitignored - never commit real account details), fill in
+# your own values, then run:
+#
+#   terraform apply -var-file=real-account.tfvars
+#
+# use_local_stack             = false
+# human_approved_real_account = true
+# aws_region                  = "us-west-2"
+# cloud_endpoints              = {}
