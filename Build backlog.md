@@ -22,7 +22,7 @@ The build is 65 epic-sized tickets across 5 phases, about 141 focused engineer-w
 | P0-02 | Cloud accounts, IaC baseline, networking, IAM | PLAT | Senior SRE | 2 | — | Dev, staging, prod created from Terraform | To do |
 | P0-02b | Prod cloud account, IaC baseline, networking, IAM | PLAT | Senior SRE | 1 | P0-02 | Prod environment created from Terraform, mirroring dev/staging | To do |
 | P0-03 | Object store layout and Iceberg catalog | PLAT | Senior | 1.5 | P0-02 | Buckets, catalog and naming conventions documented and live | Done |
-| P0-04 | Deploy orchestrator (Dagster) with partition model | PLAT | Senior | 2 | P0-02 | A partitioned asset runs and backfills in staging | To do |
+| P0-04 | Deploy orchestrator (Dagster) with partition model | PLAT | Senior | 2 | P0-02 | A partitioned asset runs and backfills in staging | Done |
 | P0-05 | Stage 0 capture for one Supercharger region | S0 | Senior | 3 | P0-03 | Raw messages land by arrival hour; counts reconcile with source | Done |
 | P0-06 | Arrival-shape profiler | DISC | Senior | 1.5 | P0-05 | Report: protocol, batching, message sizes per class and firmware | To do |
 | P0-07 | Timestamp and clock-quality profiler | DISC | Senior | 1.5 | P0-05 | Missing, epoch-default, future and drift rates per firmware | To do |
