@@ -122,10 +122,31 @@ run "both_buckets_block_all_public_access" {
 run "both_buckets_deny_insecure_transport" {
   command = plan
 
+  # landing_tls_only/warehouse_tls_only embed aws_s3_bucket.<x>.arn in their `resources` list,
+  # and a brand-new bucket's arn is "known after apply" even though the ARN is actually fully
+  # derivable from the (static) bucket name - confirmed by running this test for real ("Unknown
+  # condition value": .json itself becomes unknown because an unknown input taints the whole
+  # rendered policy document). override_resource stubs the two buckets' arn to a known value so
+  # this run can stay command = plan like every other run in this file, rather than needing an
+  # apply against LocalStack just for this one assertion.
   override_data {
     target = data.aws_caller_identity.current
     values = {
       account_id = "123456789012"
+    }
+  }
+
+  override_resource {
+    target = aws_s3_bucket.landing
+    values = {
+      arn = "arn:aws:s3:::telemetry-test-landing"
+    }
+  }
+
+  override_resource {
+    target = aws_s3_bucket.warehouse
+    values = {
+      arn = "arn:aws:s3:::telemetry-test-warehouse"
     }
   }
 
