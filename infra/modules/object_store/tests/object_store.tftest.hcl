@@ -23,6 +23,14 @@ provider "aws" {
   skip_metadata_api_check     = true
   skip_requesting_account_id  = true
 
+  # Force path-style S3 addressing against LocalStack - virtual-hosted-style requests
+  # (http://<bucket>.localhost:4566/) return HTTP 500 from LocalStack, which the AWS SDK's
+  # retry/backoff logic turns into what looks like an indefinite hang on `terraform test`
+  # (confirmed via TF_LOG=DEBUG on a real run of this exact test file - not assumed). This test
+  # file always targets LocalStack, so the setting is unconditional here (unlike the dev/staging
+  # environments' provider blocks, which gate it on var.use_local_stack).
+  s3_use_path_style = true
+
   endpoints {
     s3   = "http://localhost:4566"
     iam  = "http://localhost:4566"
