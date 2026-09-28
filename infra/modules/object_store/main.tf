@@ -8,14 +8,10 @@ locals {
 # reasoning, so a shared key would couple two things that should be able to change independently.
 data "aws_caller_identity" "current" {}
 
-# checkov:skip=CKV_AWS_111: standard AWS-default KMS key policy shape (grant the account root
-# kms:* so IAM policies elsewhere can grant/restrict actual key usage) - written out explicitly
-# per CKV2_AWS_64 below, not a custom broad grant. Same rationale as the networking module's
-# flow_logs_kms policy. Tighten with real per-role statements before a real (non-LocalStack)
-# apply, per org KMS conventions.
-# checkov:skip=CKV_AWS_109: see CKV_AWS_111 note above - same root-grant statement.
-# checkov:skip=CKV_AWS_356: see CKV_AWS_111 note above - resources = ["*"] is required here
-# because a KMS key policy's own resource element refers to the key itself, not other ARNs.
+# Standard AWS-default KMS key policy shape (grant the account root kms:* on resources = ["*"]).
+# CKV_AWS_111/109/356 flag this as an over-broad grant; accepted and suppressed via
+# infra/.checkov.yaml (inline `checkov:skip` comments don't actually suppress these three checks
+# in checkov 3.3.20 - verified by running checkov for real, not assumed).
 data "aws_iam_policy_document" "object_store_kms" {
   statement {
     sid       = "EnableRootAccountAccess"
@@ -29,9 +25,9 @@ data "aws_iam_policy_document" "object_store_kms" {
   }
 }
 
-# checkov:skip=CKV2_AWS_64: a policy IS attached (above) - checkov's graph scanner can't
+# CKV2_AWS_64 false positive: a policy IS attached (above) - checkov's graph scanner can't
 # statically resolve it through the aws_iam_policy_document data source's .json output. Same
-# false positive as the networking module's flow_logs KMS key.
+# false positive as the networking module's flow_logs KMS key. Suppressed via infra/.checkov.yaml.
 resource "aws_kms_key" "object_store" {
   description             = "${local.name_prefix} object store (S3) encryption"
   enable_key_rotation     = true
@@ -58,15 +54,10 @@ resource "aws_kms_alias" "object_store" {
 # one - "telemetry-<env>-landing" is fine for LocalStack but likely needs an account-id or
 # random suffix before a real (non-LocalStack) apply. Revisit per docs/decisions/0001.
 #
-# checkov:skip=CKV_AWS_18: access logging isn't designed yet - there's no logging bucket or
-# retention policy for it in this repo. Add one when a logging pipeline is actually designed,
-# not as a bolt-on here.
-# checkov:skip=CKV_AWS_144: cross-region replication isn't in scope for the MVP (single region).
-# Revisit before a real (non-LocalStack) apply per docs/decisions/0001.
-# checkov:skip=CKV2_AWS_61: lifecycle configuration (compaction/retention tiering) is explicitly
-# P1-02's ticket, not P0-02/P0-03's. This bucket intentionally has no lifecycle rule yet.
-# checkov:skip=CKV2_AWS_62: event notifications aren't needed until something consumes them
-# (e.g. triggering Stage 1 parsing) - out of scope for P0-03's layout/catalog goal.
+# CKV_AWS_18 (access logging), CKV_AWS_144 (cross-region replication), CKV2_AWS_61 (lifecycle
+# config), CKV2_AWS_62 (event notifications): all deferred/out-of-scope for P0-03, not
+# oversights - see infra/.checkov.yaml for the per-check rationale and why these are suppressed
+# there instead of inline (checkov 3.3.20 doesn't honor inline skips for these four checks).
 resource "aws_s3_bucket" "landing" {
   bucket        = "${local.name_prefix}-landing"
   force_destroy = var.force_destroy
@@ -137,10 +128,7 @@ resource "aws_s3_bucket_policy" "landing" {
 # stage4_device_snapshot / stage4_fleet_marts / stage4_lifetime.
 # ---------------------------------------------------------------------------
 
-# checkov:skip=CKV_AWS_18: see the landing bucket's identical note above.
-# checkov:skip=CKV_AWS_144: see the landing bucket's identical note above.
-# checkov:skip=CKV2_AWS_61: warehouse compaction/retention is P1-02's ticket, same as landing.
-# checkov:skip=CKV2_AWS_62: see the landing bucket's identical note above.
+# Same four accepted/deferred findings as the landing bucket above - see infra/.checkov.yaml.
 resource "aws_s3_bucket" "warehouse" {
   bucket        = "${local.name_prefix}-warehouse"
   force_destroy = var.force_destroy

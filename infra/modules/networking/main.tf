@@ -63,10 +63,11 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# checkov:skip=CKV2_AWS_5: intentionally provisioned ahead of any compute. P0-02's scope is
-# the networking/IAM baseline only - P0-04 (orchestrator) and P1-01 (ingest service) attach
-# their compute to this group via the internal_security_group_id output. An SG with nothing
-# attached yet is expected at this stage, not an oversight.
+# CKV2_AWS_5 (SG must be attached to another resource): intentionally provisioned ahead of any
+# compute - P0-02's scope is the networking/IAM baseline only. P0-04 (orchestrator) and P1-01
+# (ingest service) attach compute to it later via the internal_security_group_id output.
+# Suppressed via infra/.checkov.yaml (inline skip comments don't actually suppress this check in
+# checkov 3.3.20 - verified by running checkov for real, not assumed).
 resource "aws_security_group" "internal" {
   name        = "${local.name_prefix}-internal"
   description = "Allow traffic between pipeline services within this environment's VPC"
@@ -80,13 +81,12 @@ resource "aws_security_group" "internal" {
     cidr_blocks = [var.vpc_cidr]
   }
 
-  # checkov:skip=CKV_AWS_382: open egress is a deliberate placeholder for this baseline pass -
+  # CKV_AWS_382 (open egress to 0.0.0.0/0): a deliberate placeholder for this baseline pass -
   # pipeline services need general internet egress (package registries, provider APIs) and
-  # there's no NAT/VPC-endpoint design yet to scope it further. Revisit once P1-01/P0-04
-  # define what egress compute actually needs; track narrowing this in docs/decisions/ before
-  # a real (non-LocalStack) apply.
+  # there's no NAT/VPC-endpoint design yet to scope it further. Revisit once P1-01/P0-04 define
+  # what egress compute actually needs. Suppressed via infra/.checkov.yaml.
   egress {
-    description = "All outbound (see checkov:skip note above)"
+    description = "All outbound (see infra/.checkov.yaml note above)"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -116,10 +116,9 @@ data "aws_iam_policy_document" "flow_logs_kms" {
   }
 }
 
-# checkov:skip=CKV2_AWS_64: a policy IS attached (above) - checkov's graph scanner can't
-# statically resolve it through the aws_iam_policy_document data source's .json output, so it
-# reports this as if no policy were set. Confirmed by hand: the statement above is present and
-# non-empty.
+# CKV2_AWS_64 false positive: a policy IS attached (above) - checkov's graph scanner can't
+# statically resolve it through the aws_iam_policy_document data source's .json output. Confirmed
+# by hand: the statement above is present and non-empty. Suppressed via infra/.checkov.yaml.
 resource "aws_kms_key" "flow_logs" {
   description         = "${local.name_prefix} VPC flow log encryption"
   enable_key_rotation = true
