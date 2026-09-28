@@ -2,12 +2,18 @@
 #
 # Standalone modules have no provider configuration of their own (see
 # infra/modules/networking/tests/networking.tftest.hcl for the full explanation) - this
-# provider block is the same LocalStack-shaped config used everywhere else in this repo. Every
-# assertion below targets literal configuration we passed in (bucket names, versioning status,
-# public-access-block booleans, policy JSON rendered locally) rather than cloud-generated IDs,
-# so every run here only needs `plan`, never LocalStack or a real account - except the one live
-# call this module makes (data.aws_caller_identity.current, for the KMS key policy), which is
-# overridden the same way networking.tftest.hcl overrides it.
+# provider block is the same LocalStack-shaped config used everywhere else in this repo. Most
+# assertions below target literal configuration we passed in (bucket names, versioning status,
+# public-access-block booleans) rather than cloud-generated IDs, so most runs only need `plan`,
+# never LocalStack or a real account, except the one live call this module makes
+# (data.aws_caller_identity.current, for the KMS key policy), which is overridden the same way
+# networking.tftest.hcl overrides it.
+#
+# One run is the exception either way: both_buckets_deny_insecure_transport uses
+# `command = apply` (see its own comment below) because its assertions read the TLS-deny
+# policy JSON, which embeds each bucket's arn - "known after apply" for a brand-new bucket even
+# though it's fully derivable from the (static) bucket name. That one run does need LocalStack
+# actually running; every other run only needs the aws provider plugin itself.
 
 provider "aws" {
   region                      = "us-east-1"
@@ -119,39 +125,22 @@ run "both_buckets_block_all_public_access" {
   }
 }
 
+# This is the second run in the whole P0-03 suite (after
+# both_buckets_are_versioned_and_kms_encrypted's sibling in networking) that needs a real
+# target to apply against - LocalStack is enough, no real account needed. Two attempts at
+# keeping it command = plan both failed for real: landing_tls_only/warehouse_tls_only embed
+# aws_s3_bucket.<x>.arn in their `resources` list, and a brand-new bucket's arn is "known after
+# apply" even though it's fully derivable from the (static) bucket name, which taints the whole
+# rendered policy document ("Unknown condition value"). override_resource with
+# override_during = plan still didn't help - identical failure, twice. Apply is the reliable
+# fix: LocalStack actually creates the buckets, so their arn is genuinely known.
 run "both_buckets_deny_insecure_transport" {
-  command = plan
+  command = apply
 
-  # landing_tls_only/warehouse_tls_only embed aws_s3_bucket.<x>.arn in their `resources` list,
-  # and a brand-new bucket's arn is "known after apply" even though the ARN is actually fully
-  # derivable from the (static) bucket name - confirmed by running this test for real ("Unknown
-  # condition value": .json itself becomes unknown because an unknown input taints the whole
-  # rendered policy document). override_resource stubs the two buckets' arn to a known value so
-  # this run can stay command = plan like every other run in this file, rather than needing an
-  # apply against LocalStack just for this one assertion. override_during = plan is required -
-  # without it, override_resource only takes effect during apply (its default), so it had no
-  # effect at all on a command = plan run and the first attempt at this fix still failed with
-  # the identical error - confirmed by running this test for real, twice.
   override_data {
     target = data.aws_caller_identity.current
     values = {
       account_id = "123456789012"
-    }
-  }
-
-  override_resource {
-    target           = aws_s3_bucket.landing
-    override_during  = plan
-    values = {
-      arn = "arn:aws:s3:::telemetry-test-landing"
-    }
-  }
-
-  override_resource {
-    target           = aws_s3_bucket.warehouse
-    override_during  = plan
-    values = {
-      arn = "arn:aws:s3:::telemetry-test-warehouse"
     }
   }
 
