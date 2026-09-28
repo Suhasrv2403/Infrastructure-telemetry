@@ -1,8 +1,28 @@
 # Native Terraform/OpenTofu tests for the iam module (P0-02).
-# See infra/modules/networking/tests/networking.tftest.hcl for why these could not be
-# executed in the sandbox this repo was authored in (provider registry access is blocked
-# there for `init`, which `test` needs just like `plan`/`apply`). Run with `tofu test` /
-# `terraform test` from infra/modules/iam in a normal, network-connected environment.
+#
+# Standalone modules have no provider configuration of their own - without one, `terraform
+# test` picks an implicit default `aws` provider and tries to authenticate against real AWS.
+# The provider block below configures it the same way the dev/staging root modules do
+# (LocalStack-shaped, dummy credentials). Unlike the networking module, nothing here reads a
+# live data source (aws_iam_policy_document just renders JSON locally), so these tests need no
+# LocalStack and no real account - only the aws provider plugin itself. Run with `tofu test` /
+# `terraform test` from infra/modules/iam in any environment with normal registry access.
+
+provider "aws" {
+  region                      = "us-east-1"
+  access_key                  = "test"
+  secret_key                  = "test"
+  skip_credentials_validation = true
+  skip_metadata_api_check     = true
+  skip_requesting_account_id  = true
+
+  endpoints {
+    s3  = "http://localhost:4566"
+    iam = "http://localhost:4566"
+    sts = "http://localhost:4566"
+    ec2 = "http://localhost:4566"
+  }
+}
 
 variables {
   environment = "test"
