@@ -30,7 +30,7 @@ provider "aws" {
     ec2  = "http://localhost:4566"
     kms  = "http://localhost:4566"
     logs = "http://localhost:4566"
-    glue = "http://localhost:4566"
+    glue = "http://localhost:4567"
   }
 }
 
@@ -138,12 +138,15 @@ run "both_buckets_block_all_public_access" {
 # plan_options.target scopes the apply to just the two policy documents under test (which pulls
 # in their one dependency each, the bare aws_s3_bucket resources, and nothing else) - this run
 # never needs the KMS key, the Glue catalog database, versioning, SSE config, or public-access-
-# block, so it doesn't apply them. This matters beyond tidiness: LocalStack's Glue Data Catalog
-# support is gated behind their paid Ultimate plan (confirmed against LocalStack's own docs),
-# so an untargeted apply of this whole module hangs on LocalStack silently failing to fulfill
-# the aws_glue_catalog_database create call, rather than erroring - confirmed by running this
-# test for real (it froze with the first three plan-only runs already passed, right where this
-# run's apply would have started creating the Glue database).
+# block, so it doesn't apply them. This was originally a hard requirement, not just tidiness:
+# LocalStack's Glue Data Catalog support is gated behind their paid Ultimate plan, so an
+# untargeted apply of this whole module hung - LocalStack silently never responded to the
+# aws_glue_catalog_database create call instead of erroring (confirmed by running this test for
+# real: it froze with the first three plan-only runs already passed, right where this run's
+# apply would have started creating the Glue database). glue now points at Floci instead (see
+# infra/environments/*/variables.tf's cloud_endpoints description), which does support Glue for
+# free, so this scoping is no longer strictly required - kept anyway, since there's no reason
+# for this run to create four resources it doesn't assert anything about.
 run "both_buckets_deny_insecure_transport" {
   command = apply
 
