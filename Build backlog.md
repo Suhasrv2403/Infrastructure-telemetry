@@ -18,7 +18,7 @@ The build is 65 epic-sized tickets across 5 phases, about 141 focused engineer-w
 
 | ID | Ticket | Component | Owner level | Est. (wk) | Depends on | Done when | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| P0-01 | Audit existing telemetry backend and data flows | DISC | Staff | 2 | — | Written map of sources, formats, retention and known drops | To do |
+| P0-01 | Audit existing telemetry backend and data flows | DISC | Staff | 2 | — | Written map of sources, formats, retention and known drops (real audit needs access to the live backend and stakeholder interviews - human-owned; see branch P0-01-telemetry-backend-audit for a ready-to-run audit template and interview question set) | To do |
 | P0-02 | Cloud accounts, IaC baseline, networking, IAM | PLAT | Senior SRE | 2 | — | Dev, staging, prod created from Terraform | To do |
 | P0-02b | Prod cloud account, IaC baseline, networking, IAM | PLAT | Senior SRE | 1 | P0-02 | Prod environment created from Terraform, mirroring dev/staging | To do |
 | P0-03 | Object store layout and Iceberg catalog | PLAT | Senior | 1.5 | P0-02 | Buckets, catalog and naming conventions documented and live | Done |
@@ -28,9 +28,9 @@ The build is 65 epic-sized tickets across 5 phases, about 141 focused engineer-w
 | P0-07 | Timestamp and clock-quality profiler | DISC | Senior | 1.5 | P0-05 | Missing, epoch-default, future and drift rates per firmware | Done |
 | P0-08 | Lateness and duplicate profiler | DISC | Senior | 1.5 | P0-05 | Lateness distribution and duplicate rate per class | Done |
 | P0-09 | Device retry-behavior test with fault injection | DISC | Senior SRE + firmware | 2 | P0-05 | Retry, buffer or drop behavior documented per firmware (real fault injection - human/firmware-owned, see branch P0-09-device-retry-behavior-profiler for a synthetic-proxy analysis and a ready-to-run test plan) | To do |
-| P0-10 | Signal catalog v0 (top 3 firmware per class) | S2 | Senior + firmware SME | 3 | P0-06 | Canonical names, units, semantics reviewed by firmware | To do |
-| P0-11 | Access to RMA, tickets, dispatch, outage, provisioning data | DISC | EM + senior DS | 3 | — | Read access granted; sample extracts loaded | To do |
-| P0-12 | Privacy and security review kickoff | GOV | EM | 2 | — | Data classification drafted; residential and utility-site reviews booked | To do |
+| P0-10 | Signal catalog v0 (top 3 firmware per class) | S2 | Senior + firmware SME | 3 | P0-06 | Canonical names, units, semantics reviewed by firmware (firmware SME sign-off is human-owned; see branch P0-10-signal-catalog-v0 for a drafted v0 catalog covering Supercharger stall/cabinet, awaiting that review) | To do |
+| P0-11 | Access to RMA, tickets, dispatch, outage, provisioning data | DISC | EM + senior DS | 3 | — | Read access granted; sample extracts loaded (granting real access is human/IT-owned; see branch P0-11-data-access-requests for drafted access requests per source) | To do |
+| P0-12 | Privacy and security review kickoff | GOV | EM | 2 | — | Data classification drafted; residential and utility-site reviews booked (booking the real reviews is human-owned; see branch P0-12-privacy-security-review for a drafted data classification and review brief) | To do |
 | P0-13 | Profiling report and design lock | DISC | Staff | 1 | P0-06–10 | Lateness horizon, grains and firmware asks signed off (Gate 0) | To do |
 
 ## Phase 1 · Core pipeline, Supercharger pilot (months 2–5)
