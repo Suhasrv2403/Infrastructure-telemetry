@@ -28,10 +28,13 @@ resource "aws_iam_role" "orchestrator" {
   tags               = var.tags
 }
 
-# Only attached once a landing bucket ARN is supplied (P0-03+). Scoped to writes only - the
-# ingest path should never need to read or delete from Stage 0 (invariant 1: append-only).
+# Only attached when attach_ingest_s3_write = true (P0-03+, once a landing bucket exists).
+# Scoped to writes only - the ingest path should never need to read or delete from Stage 0
+# (invariant 1: append-only). Gated on attach_ingest_s3_write, not landing_bucket_arn == null -
+# see that variable's description for why (count needs a plan-time-known value; the ARN itself
+# doesn't).
 data "aws_iam_policy_document" "ingest_service_s3_write" {
-  count = var.landing_bucket_arn == null ? 0 : 1
+  count = var.attach_ingest_s3_write ? 1 : 0
 
   statement {
     sid       = "WriteStage0Landing"
@@ -41,7 +44,7 @@ data "aws_iam_policy_document" "ingest_service_s3_write" {
 }
 
 resource "aws_iam_role_policy" "ingest_service_s3_write" {
-  count  = var.landing_bucket_arn == null ? 0 : 1
+  count  = var.attach_ingest_s3_write ? 1 : 0
   name   = "${local.name_prefix}-ingest-s3-write"
   role   = aws_iam_role.ingest_service.id
   policy = data.aws_iam_policy_document.ingest_service_s3_write[0].json

@@ -75,9 +75,14 @@ run "both_buckets_are_versioned_and_kms_encrypted" {
   }
 
   assert {
+    # rule is a TypeSet block (a bucket could in principle have more than one), so it isn't
+    # index-able with [0] - confirmed by running this test for real ("Cannot index a set
+    # value"). one() is the idiomatic way to pull the single element out of a set/list that's
+    # known to have exactly one item, which is always true here (main.tf only ever writes one
+    # rule block per bucket).
     condition = (
-      aws_s3_bucket_server_side_encryption_configuration.landing.rule[0].apply_server_side_encryption_by_default[0].sse_algorithm == "aws:kms" &&
-      aws_s3_bucket_server_side_encryption_configuration.warehouse.rule[0].apply_server_side_encryption_by_default[0].sse_algorithm == "aws:kms"
+      one(aws_s3_bucket_server_side_encryption_configuration.landing.rule).apply_server_side_encryption_by_default[0].sse_algorithm == "aws:kms" &&
+      one(aws_s3_bucket_server_side_encryption_configuration.warehouse.rule).apply_server_side_encryption_by_default[0].sse_algorithm == "aws:kms"
     )
     error_message = "Both buckets must be encrypted with a customer-managed KMS key, not SSE-S3."
   }

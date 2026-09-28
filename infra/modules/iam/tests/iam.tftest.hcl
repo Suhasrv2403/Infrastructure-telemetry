@@ -48,7 +48,9 @@ run "both_service_roles_are_created_with_an_assume_role_policy" {
 run "s3_write_policy_is_not_attached_without_a_landing_bucket" {
   command = plan
 
-  # landing_bucket_arn defaults to null - P0-03 (the Stage 0 landing bucket) doesn't exist yet.
+  # attach_ingest_s3_write defaults to false - P0-03 (the Stage 0 landing bucket) doesn't exist
+  # yet in this run, and the two are deliberately separate variables (see
+  # infra/modules/iam/variables.tf).
 
   assert {
     condition     = length(aws_iam_role_policy.ingest_service_s3_write) == 0
@@ -65,7 +67,8 @@ run "s3_write_policy_attaches_and_is_scoped_once_landing_bucket_is_set" {
   command = plan
 
   variables {
-    landing_bucket_arn = "arn:aws:s3:::telemetry-test-landing"
+    attach_ingest_s3_write = true
+    landing_bucket_arn     = "arn:aws:s3:::telemetry-test-landing"
   }
 
   assert {

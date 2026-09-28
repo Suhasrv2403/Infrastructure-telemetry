@@ -44,8 +44,9 @@ module "object_store" {
 }
 
 module "iam" {
-  source              = "../../modules/iam"
-  environment         = "dev"
-  tags                = local.common_tags
-  landing_bucket_arn  = module.object_store.landing_bucket_arn
+  source                  = "../../modules/iam"
+  environment             = "dev"
+  tags                    = local.common_tags
+  attach_ingest_s3_write  = true
+  landing_bucket_arn      = module.object_store.landing_bucket_arn
 }
