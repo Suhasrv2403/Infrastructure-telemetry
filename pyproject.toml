@@ -3,9 +3,23 @@ name = "infrastructure-telemetry"
 version = "0.0.0"
 description = "Energy fleet reliability pipeline (see README.md and CLAUDE.md)."
 requires-python = ">=3.11"
-# Local dev note: this repo targets Python 3.11+ (see CLAUDE.md "Stack"). If your local
-# interpreter is older, pytest will generally still run the test suite as-is; treat 3.11+ as
-# a hard requirement only once packages/dependencies are added that need it.
+# Local dev note: this repo targets Python 3.11+ (see CLAUDE.md "Stack"), but at least one real
+# dev machine actually runs 3.10.12 (confirmed by running P0-05's test suite for real, not
+# assumed - it failed on `datetime.UTC`, a 3.11-only alias). Until every dev environment is
+# actually on 3.11+, new code should stick to 3.10-compatible stdlib APIs (e.g.
+# `datetime.timezone.utc`, not the newer `datetime.UTC` alias) even though ruff's
+# target-version below will suggest the newer form.
+dependencies = [
+    "boto3>=1.34",
+]
+
+[project.optional-dependencies]
+# Installed for running the test suite (pip install -e ".[test]"). moto mocks S3 so
+# tests/unit/test_stage0_capture.py doesn't need LocalStack/Floci running.
+test = [
+    "pytest>=7.0",
+    "moto[s3]>=5.0",
+]
 
 [tool.pytest.ini_options]
 minversion = "7.0"
@@ -15,3 +29,9 @@ addopts = "-ra -q"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+# UP017 ("use datetime.UTC alias") is a 3.11-only suggestion - ignored because at least one
+# real dev machine still runs 3.10.12 (see the requires-python note above), where
+# datetime.UTC doesn't exist. Revisit once every dev environment is confirmed on 3.11+.
+ignore = ["UP017"]
