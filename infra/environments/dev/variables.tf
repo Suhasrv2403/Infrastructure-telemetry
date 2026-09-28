@@ -4,7 +4,8 @@ variable "use_local_stack" {
   description = <<-EOT
     When true (the default), the aws provider points at LocalStack and no real credentials
     are needed - safe to plan/apply repeatedly. Flip to false only for a real account, and
-    only together with human_approved_real_account = true (see the guard in main.tf).
+    only together with human_approved_real_account = true (enforced by the validation block
+    below, not a locals/tobool hack).
   EOT
 }
 
@@ -17,6 +18,11 @@ variable "human_approved_real_account" {
     anything touches a real account", and CLAUDE.md: "Humans own... anything touching prod
     data"). Left false, setting use_local_stack = false is refused at plan time.
   EOT
+
+  validation {
+    condition     = var.use_local_stack || var.human_approved_real_account
+    error_message = "BLOCKED: set human_approved_real_account = true only after a human has reviewed and approved applying dev against a real cloud account. See docs/KICKOFF.md."
+  }
 }
 
 variable "cloud_endpoints" {
