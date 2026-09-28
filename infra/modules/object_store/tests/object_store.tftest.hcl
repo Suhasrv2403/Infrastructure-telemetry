@@ -128,7 +128,10 @@ run "both_buckets_deny_insecure_transport" {
   # condition value": .json itself becomes unknown because an unknown input taints the whole
   # rendered policy document). override_resource stubs the two buckets' arn to a known value so
   # this run can stay command = plan like every other run in this file, rather than needing an
-  # apply against LocalStack just for this one assertion.
+  # apply against LocalStack just for this one assertion. override_during = plan is required -
+  # without it, override_resource only takes effect during apply (its default), so it had no
+  # effect at all on a command = plan run and the first attempt at this fix still failed with
+  # the identical error - confirmed by running this test for real, twice.
   override_data {
     target = data.aws_caller_identity.current
     values = {
@@ -137,14 +140,16 @@ run "both_buckets_deny_insecure_transport" {
   }
 
   override_resource {
-    target = aws_s3_bucket.landing
+    target           = aws_s3_bucket.landing
+    override_during  = plan
     values = {
       arn = "arn:aws:s3:::telemetry-test-landing"
     }
   }
 
   override_resource {
-    target = aws_s3_bucket.warehouse
+    target           = aws_s3_bucket.warehouse
+    override_during  = plan
     values = {
       arn = "arn:aws:s3:::telemetry-test-warehouse"
     }
