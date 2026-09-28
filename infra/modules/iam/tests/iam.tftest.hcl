@@ -79,7 +79,10 @@ run "s3_write_policy_attaches_and_is_scoped_once_landing_bucket_is_set" {
   assert {
     condition = (
       length(jsondecode(data.aws_iam_policy_document.ingest_service_s3_write[0].json).Statement) == 1 &&
-      jsondecode(data.aws_iam_policy_document.ingest_service_s3_write[0].json).Statement[0].Resource[0] == "arn:aws:s3:::telemetry-test-landing/*"
+      # aws_iam_policy_document renders a single-element Resource set as a bare JSON string,
+      # not a one-item array (confirmed by running this test for real) - compare directly,
+      # don't index into it.
+      jsondecode(data.aws_iam_policy_document.ingest_service_s3_write[0].json).Statement[0].Resource == "arn:aws:s3:::telemetry-test-landing/*"
     )
     error_message = "The S3 write policy must be scoped to objects under the landing bucket only, not the bucket ARN itself or a wider resource."
   }

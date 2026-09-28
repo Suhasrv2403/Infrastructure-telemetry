@@ -7,12 +7,18 @@ locals {
 }
 
 provider "aws" {
-  region                      = var.aws_region
-  access_key                  = var.use_local_stack ? "test" : null
-  secret_key                  = var.use_local_stack ? "test" : null
-  skip_credentials_validation = var.use_local_stack
-  skip_metadata_api_check     = var.use_local_stack
-  skip_requesting_account_id  = var.use_local_stack
+  region     = var.aws_region
+  access_key = var.use_local_stack ? "test" : null
+  secret_key = var.use_local_stack ? "test" : null
+
+  # Always skip the provider's own implicit "who am I" check at configure time - it's a
+  # redundant early ping (real resource operations against a real account will surface bad
+  # credentials on their own, immediately). Doing this unconditionally, rather than only when
+  # use_local_stack = true, means the human_approved_real_account guard (variables.tf) is what
+  # blocks a real-account plan, not an incidental STS call racing ahead of that validation.
+  skip_credentials_validation = true
+  skip_metadata_api_check     = true
+  skip_requesting_account_id  = true
 
   endpoints {
     s3  = var.use_local_stack ? var.cloud_endpoints.s3 : null

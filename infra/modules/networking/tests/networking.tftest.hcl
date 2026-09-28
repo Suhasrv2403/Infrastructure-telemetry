@@ -8,11 +8,15 @@
 #
 # That still leaves one live call: `data.aws_caller_identity.current` (used to build the flow
 # log KMS key policy) genuinely calls STS during `plan`, even a plan that creates everything
-# from scratch - data sources are read, resources are not. Rather than requiring LocalStack
-# just to run these tests, every run overrides that one data source with a fixed value
-# (override_data, Terraform/OpenTofu >= 1.7) - these tests should never need LocalStack or a
-# real account, only the aws provider plugin itself. Run with `tofu test` / `terraform test`
-# from infra/modules/networking in any environment with normal registry access.
+# from scratch - data sources are read, resources are not. Every run overrides that one data
+# source with a fixed value (override_data, Terraform/OpenTofu >= 1.7), so none of them need
+# LocalStack or a real account for that.
+#
+# One run is the exception either way: default_security_group_is_locked_down_to_zero_rules
+# uses `command = apply` (see its own comment below) because aws_default_security_group's
+# reconciled ingress/egress are only known post-apply, not at plan time - that one run does
+# need LocalStack actually running. Every other run only needs the aws provider plugin itself.
+# Run with `tofu test` / `terraform test` from infra/modules/networking.
 
 provider "aws" {
   region                      = "us-east-1"
@@ -111,8 +115,14 @@ run "internal_security_group_ingress_is_scoped_to_vpc_cidr" {
   }
 }
 
+# Unlike every other run in this file, this one needs `apply`, not `plan`: aws_default_security
+# _group reconciles whatever rules already exist on the VPC's auto-created default SG, so its
+# resulting ingress/egress sets are only known once that reconciliation actually happens
+# (confirmed by running this test for real - `plan` reports "Unknown condition value" on both
+# sets). This is the one run in the whole P0-02 suite that needs a real target to apply against
+# (LocalStack is enough; it does not need a real account).
 run "default_security_group_is_locked_down_to_zero_rules" {
-  command = plan
+  command = apply
 
   override_data {
     target = data.aws_caller_identity.current
