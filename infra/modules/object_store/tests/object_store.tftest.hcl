@@ -134,8 +134,25 @@ run "both_buckets_block_all_public_access" {
 # rendered policy document ("Unknown condition value"). override_resource with
 # override_during = plan still didn't help - identical failure, twice. Apply is the reliable
 # fix: LocalStack actually creates the buckets, so their arn is genuinely known.
+#
+# plan_options.target scopes the apply to just the two policy documents under test (which pulls
+# in their one dependency each, the bare aws_s3_bucket resources, and nothing else) - this run
+# never needs the KMS key, the Glue catalog database, versioning, SSE config, or public-access-
+# block, so it doesn't apply them. This matters beyond tidiness: LocalStack's Glue Data Catalog
+# support is gated behind their paid Ultimate plan (confirmed against LocalStack's own docs),
+# so an untargeted apply of this whole module hangs on LocalStack silently failing to fulfill
+# the aws_glue_catalog_database create call, rather than erroring - confirmed by running this
+# test for real (it froze with the first three plan-only runs already passed, right where this
+# run's apply would have started creating the Glue database).
 run "both_buckets_deny_insecure_transport" {
   command = apply
+
+  plan_options {
+    target = [
+      data.aws_iam_policy_document.landing_tls_only,
+      data.aws_iam_policy_document.warehouse_tls_only,
+    ]
+  }
 
   override_data {
     target = data.aws_caller_identity.current
