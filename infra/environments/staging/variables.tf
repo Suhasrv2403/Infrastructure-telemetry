@@ -32,9 +32,7 @@ variable "cloud_endpoints" {
     root module never hardcode which cloud they're talking to, only this variable does.
     Defaults target LocalStack's single edge port (4566, used for every service in modern
     LocalStack). Every service any module in this repo actually calls must be listed here -
-    kms and logs were added after the flow-log KMS key and log group were caught hitting real
-    AWS during testing because they weren't overridden. Ignored when use_local_stack = false
-    (the real provider defaults apply).
+    glue was added alongside P0-03's object store module (Iceberg catalog).
   EOT
   type = object({
     s3   = optional(string)
@@ -43,6 +41,7 @@ variable "cloud_endpoints" {
     ec2  = optional(string)
     kms  = optional(string)
     logs = optional(string)
+    glue = optional(string)
   })
   default = {
     s3   = "http://localhost:4566"
@@ -51,6 +50,7 @@ variable "cloud_endpoints" {
     ec2  = "http://localhost:4566"
     kms  = "http://localhost:4566"
     logs = "http://localhost:4566"
+    glue = "http://localhost:4566"
   }
 }
 

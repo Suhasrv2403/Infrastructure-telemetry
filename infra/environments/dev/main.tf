@@ -27,6 +27,7 @@ provider "aws" {
     ec2  = var.use_local_stack ? var.cloud_endpoints.ec2 : null
     kms  = var.use_local_stack ? var.cloud_endpoints.kms : null
     logs = var.use_local_stack ? var.cloud_endpoints.logs : null
+    glue = var.use_local_stack ? var.cloud_endpoints.glue : null
   }
 }
 
@@ -36,8 +37,15 @@ module "networking" {
   tags        = local.common_tags
 }
 
-module "iam" {
-  source      = "../../modules/iam"
+module "object_store" {
+  source      = "../../modules/object_store"
   environment = "dev"
   tags        = local.common_tags
+}
+
+module "iam" {
+  source              = "../../modules/iam"
+  environment         = "dev"
+  tags                = local.common_tags
+  landing_bucket_arn  = module.object_store.landing_bucket_arn
 }

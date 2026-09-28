@@ -1,0 +1,216 @@
+locals {
+  name_prefix   = "telemetry-${var.environment}"
+  glue_db_name  = replace(local.name_prefix, "-", "_")
+}
+
+# KMS key for object store (S3) encryption - separate from the networking module's flow-log
+# key: different data (device telemetry vs. VPC flow logs), different blast radius and rotation
+# reasoning, so a shared key would couple two things that should be able to change independently.
+data "aws_caller_identity" "current" {}
+
+# checkov:skip=CKV_AWS_111: standard AWS-default KMS key policy shape (grant the account root
+# kms:* so IAM policies elsewhere can grant/restrict actual key usage) - written out explicitly
+# per CKV2_AWS_64 below, not a custom broad grant. Same rationale as the networking module's
+# flow_logs_kms policy. Tighten with real per-role statements before a real (non-LocalStack)
+# apply, per org KMS conventions.
+# checkov:skip=CKV_AWS_109: see CKV_AWS_111 note above - same root-grant statement.
+# checkov:skip=CKV_AWS_356: see CKV_AWS_111 note above - resources = ["*"] is required here
+# because a KMS key policy's own resource element refers to the key itself, not other ARNs.
+data "aws_iam_policy_document" "object_store_kms" {
+  statement {
+    sid       = "EnableRootAccountAccess"
+    actions   = ["kms:*"]
+    resources = ["*"]
+
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+  }
+}
+
+# checkov:skip=CKV2_AWS_64: a policy IS attached (above) - checkov's graph scanner can't
+# statically resolve it through the aws_iam_policy_document data source's .json output. Same
+# false positive as the networking module's flow_logs KMS key.
+resource "aws_kms_key" "object_store" {
+  description             = "${local.name_prefix} object store (S3) encryption"
+  enable_key_rotation     = true
+  deletion_window_in_days = var.kms_key_deletion_window_days
+  policy                  = data.aws_iam_policy_document.object_store_kms.json
+
+  tags = merge(var.tags, { Name = "${local.name_prefix}-object-store-kms" })
+}
+
+resource "aws_kms_alias" "object_store" {
+  name          = "alias/${local.name_prefix}-object-store"
+  target_key_id = aws_kms_key.object_store.key_id
+}
+
+# ---------------------------------------------------------------------------
+# Landing bucket - Stage 0 (raw, append-only, arrival-hour partitioned).
+# Layout convention (docs/decisions/0001-object-store-layout.md):
+#   s3://<landing bucket>/raw/arrival_date=YYYY-MM-DD/hour=HH/<file>
+# Only the ingest service writes here (iam module's ingest_service role, scoped to
+# PutObject/AbortMultipartUpload only via landing_bucket_arn - invariant 1: append-only).
+# ---------------------------------------------------------------------------
+
+# Real-account note: S3 bucket names are globally unique across all AWS accounts, not just this
+# one - "telemetry-<env>-landing" is fine for LocalStack but likely needs an account-id or
+# random suffix before a real (non-LocalStack) apply. Revisit per docs/decisions/0001.
+#
+# checkov:skip=CKV_AWS_18: access logging isn't designed yet - there's no logging bucket or
+# retention policy for it in this repo. Add one when a logging pipeline is actually designed,
+# not as a bolt-on here.
+# checkov:skip=CKV_AWS_144: cross-region replication isn't in scope for the MVP (single region).
+# Revisit before a real (non-LocalStack) apply per docs/decisions/0001.
+# checkov:skip=CKV2_AWS_61: lifecycle configuration (compaction/retention tiering) is explicitly
+# P1-02's ticket, not P0-02/P0-03's. This bucket intentionally has no lifecycle rule yet.
+# checkov:skip=CKV2_AWS_62: event notifications aren't needed until something consumes them
+# (e.g. triggering Stage 1 parsing) - out of scope for P0-03's layout/catalog goal.
+resource "aws_s3_bucket" "landing" {
+  bucket        = "${local.name_prefix}-landing"
+  force_destroy = var.force_destroy
+
+  tags = merge(var.tags, { Name = "${local.name_prefix}-landing", Stage = "0-landing" })
+}
+
+resource "aws_s3_bucket_versioning" "landing" {
+  bucket = aws_s3_bucket.landing.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "landing" {
+  bucket = aws_s3_bucket.landing.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.object_store.arn
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "landing" {
+  bucket = aws_s3_bucket.landing.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+data "aws_iam_policy_document" "landing_tls_only" {
+  statement {
+    sid       = "DenyInsecureTransport"
+    effect    = "Deny"
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.landing.arn, "${aws_s3_bucket.landing.arn}/*"]
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "landing" {
+  bucket = aws_s3_bucket.landing.id
+  policy = data.aws_iam_policy_document.landing_tls_only.json
+}
+
+# ---------------------------------------------------------------------------
+# Warehouse bucket - Stages 1-4 (Iceberg table data + metadata).
+# Layout convention (docs/decisions/0001-object-store-layout.md):
+#   s3://<warehouse bucket>/<table name>/data/... and /metadata/... (Iceberg-managed)
+# Table names match the stage they belong to: stage1_parsed, stage2_canonical,
+# stage3_grid / stage3_device_event / stage3_device_day, stage4_cohort_day / stage4_findings /
+# stage4_device_snapshot / stage4_fleet_marts / stage4_lifetime.
+# ---------------------------------------------------------------------------
+
+# checkov:skip=CKV_AWS_18: see the landing bucket's identical note above.
+# checkov:skip=CKV_AWS_144: see the landing bucket's identical note above.
+# checkov:skip=CKV2_AWS_61: warehouse compaction/retention is P1-02's ticket, same as landing.
+# checkov:skip=CKV2_AWS_62: see the landing bucket's identical note above.
+resource "aws_s3_bucket" "warehouse" {
+  bucket        = "${local.name_prefix}-warehouse"
+  force_destroy = var.force_destroy
+
+  tags = merge(var.tags, { Name = "${local.name_prefix}-warehouse", Stage = "1-4-warehouse" })
+}
+
+resource "aws_s3_bucket_versioning" "warehouse" {
+  bucket = aws_s3_bucket.warehouse.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "warehouse" {
+  bucket = aws_s3_bucket.warehouse.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.object_store.arn
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "warehouse" {
+  bucket = aws_s3_bucket.warehouse.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+data "aws_iam_policy_document" "warehouse_tls_only" {
+  statement {
+    sid       = "DenyInsecureTransport"
+    effect    = "Deny"
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.warehouse.arn, "${aws_s3_bucket.warehouse.arn}/*"]
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "warehouse" {
+  bucket = aws_s3_bucket.warehouse.id
+  policy = data.aws_iam_policy_document.warehouse_tls_only.json
+}
+
+# ---------------------------------------------------------------------------
+# Iceberg catalog - one Glue Data Catalog database per environment. Spark/Dagster register
+# every stage's Iceberg table into this database; its location_uri is the default table root
+# under the warehouse bucket, so a table created without an explicit LOCATION lands in the
+# right place automatically.
+# ---------------------------------------------------------------------------
+
+resource "aws_glue_catalog_database" "telemetry" {
+  name         = local.glue_db_name
+  description  = "Iceberg catalog for the ${var.environment} telemetry lakehouse (P0-03)."
+  location_uri = "s3://${aws_s3_bucket.warehouse.bucket}/"
+}
