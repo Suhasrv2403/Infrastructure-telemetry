@@ -1,6 +1,6 @@
 # Build backlog
 
-The build is 64 epic-sized tickets across 5 phases, about 140 focused engineer-weeks; each ticket should be split into 1–3 day stories at sprint planning.
+The build is 65 epic-sized tickets across 5 phases, about 141 focused engineer-weeks; each ticket should be split into 1–3 day stories at sprint planning.
 
 **Conventions**
 
@@ -14,12 +14,13 @@ The build is 64 epic-sized tickets across 5 phases, about 140 focused engineer-w
 
 ## Phase 0 · Discover and capture (months 0–2)
 
-13 tickets, \~26 engineer-weeks. Goal: replace assumptions with measurements before locking storage and grain decisions.
+14 tickets, \~27 engineer-weeks. Goal: replace assumptions with measurements before locking storage and grain decisions.
 
 | ID | Ticket | Component | Owner level | Est. (wk) | Depends on | Done when | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | P0-01 | Audit existing telemetry backend and data flows | DISC | Staff | 2 | — | Written map of sources, formats, retention and known drops | To do |
 | P0-02 | Cloud accounts, IaC baseline, networking, IAM | PLAT | Senior SRE | 2 | — | Dev, staging, prod created from Terraform | To do |
+| P0-02b | Prod cloud account, IaC baseline, networking, IAM | PLAT | Senior SRE | 1 | P0-02 | Prod environment created from Terraform, mirroring dev/staging | To do |
 | P0-03 | Object store layout and Iceberg catalog | PLAT | Senior | 1.5 | P0-02 | Buckets, catalog and naming conventions documented and live | Done |
 | P0-04 | Deploy orchestrator (Dagster) with partition model | PLAT | Senior | 2 | P0-02 | A partitioned asset runs and backfills in staging | To do |
 | P0-05 | Stage 0 capture for one Supercharger region | S0 | Senior | 3 | P0-03 | Raw messages land by arrival hour; counts reconcile with source | Done |
