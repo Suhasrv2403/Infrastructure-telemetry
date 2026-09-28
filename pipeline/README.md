@@ -3,6 +3,11 @@
 Dagster assets, one directory per pipeline stage. See CLAUDE.md for the full grain and
 invariant definitions - this file is just an index.
 
+`definitions.py` is the Dagster entrypoint (P0-04): `dagster dev -f pipeline/definitions.py`
+(or `TELEMETRY_ENV=staging dagster dev -f pipeline/definitions.py` for staging). It registers
+each stage's assets as they land - today just `stage0_landing` (P0-05's capture, wrapped as a
+partitioned asset in `stage0_landing/dagster_assets.py`).
+
 | Directory | Stage | Grain | Ticket(s) |
 | --- | --- | --- | --- |
 | `stage0_landing/` | Stage 0 Landing | One row per message as received; partitioned by ARRIVAL hour; immutable | P0-05, P1-02 |

@@ -22,3 +22,10 @@ source. Run it directly against a bucket with:
 
 Unit tests (`tests/unit/test_stage0_capture.py`) mock S3 with moto rather than requiring
 LocalStack/Floci to be running.
+
+`dagster_assets.py` (P0-04) wraps the same capture_messages()/reconcile() logic as a
+partitioned Dagster asset (`stage0_landing`, hourly partitions), so it can be run and
+backfilled through the orchestrator instead of only via capture.py's standalone CLI. The
+message source is still the synthetic fixture generator (see the module's own scope note), so
+the asset's partition set is bounded to the date range that generator actually produces
+arrivals in, not to real wall-clock "now" - see `pipeline/definitions.py` for how to run it.
