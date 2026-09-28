@@ -31,7 +31,7 @@ The build is 65 epic-sized tickets across 5 phases, about 141 focused engineer-w
 | P0-10 | Signal catalog v0 (top 3 firmware per class) | S2 | Senior + firmware SME | 3 | P0-06 | Canonical names, units, semantics reviewed by firmware (firmware SME sign-off is human-owned; see branch P0-10-signal-catalog-v0 for a drafted v0 catalog covering Supercharger stall/cabinet, awaiting that review) | To do |
 | P0-11 | Access to RMA, tickets, dispatch, outage, provisioning data | DISC | EM + senior DS | 3 | — | Read access granted; sample extracts loaded (granting real access is human/IT-owned; see branch P0-11-data-access-requests for drafted access requests per source) | To do |
 | P0-12 | Privacy and security review kickoff | GOV | EM | 2 | — | Data classification drafted; residential and utility-site reviews booked (booking the real reviews is human-owned; see branch P0-12-privacy-security-review for a drafted data classification and review brief) | To do |
-| P0-13 | Profiling report and design lock | DISC | Staff | 1 | P0-06–10 | Lateness horizon, grains and firmware asks signed off (Gate 0) | To do |
+| P0-13 | Profiling report and design lock | DISC | Staff | 1 | P0-06–10 | Lateness horizon, grains and firmware asks signed off (Gate 0) (sign-off is human-owned; see branch P0-13-profiling-report-design-lock for a consolidated report with a recommended 24h lateness horizon and an unchecked sign-off checklist, ready for review) | To do |
 
 ## Phase 1 · Core pipeline, Supercharger pilot (months 2–5)
 
@@ -41,7 +41,7 @@ The build is 65 epic-sized tickets across 5 phases, about 141 focused engineer-w
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | P1-01 | Production ingest buffer with accept-and-spool | INGEST | Senior | 3 | P0-13 | Load test at 10x current Supercharger rate with zero loss | To do |
 | P1-02 | Stage 0 compaction and retention tiering | S0 | Mid | 1 | P1-01 | Hourly compaction; 30-day hot then archive lifecycle active | To do |
-| P1-03 | Parser framework with versioned per-firmware parsers | S1 | Senior | 3 | P0-10 | Parsers registered by firmware; unknown formats routed to quarantine | To do |
+| P1-03 | Parser framework with versioned per-firmware parsers | S1 | Senior | 3 | P0-10 | Parsers registered by firmware; unknown formats routed to quarantine (framework built with one demo parser registered, all other firmware/classes correctly quarantine - see branch P1-03-parser-framework; full real coverage across firmware versions is P1-04) | Done |
 | P1-04 | Supercharger stall and cabinet parsers | S1 | Mid | 2 | P1-03 | Top firmware versions parse with fixture tests from real payloads | To do |
 | P1-05 | Timestamp sanity checks and quarantine table | S1 | Mid | 1.5 | P1-03 | Epoch, future and implausible times quarantined with reason codes | To do |
 | P1-06 | Idempotent merge on natural key into event-time partitions | S1 | Senior | 2 | P1-03 | Replaying a message N times yields exactly one row | To do |
