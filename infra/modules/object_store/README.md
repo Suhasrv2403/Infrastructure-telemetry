@@ -14,3 +14,14 @@ this module implements that decision, it doesn't redefine it.
 
 Like `networking` and `iam`, this module is cloud-agnostic - it takes no opinion on
 LocalStack vs. a real account. That's the root modules' job (`cloud_endpoints`).
+
+One wrinkle specific to this module: LocalStack's Glue Data Catalog support requires their
+paid Ultimate plan, and silently hangs (rather than erroring) if you try to create a Glue
+database against a non-Ultimate LocalStack - confirmed by actually running `terraform apply`
+against it. `cloud_endpoints.glue` defaults to a separate emulator, Floci (https://floci.io),
+run alongside LocalStack on a remapped port:
+
+    docker run -d --name floci -p 4567:4566 -v /var/run/docker.sock:/var/run/docker.sock floci/floci:latest
+
+Every other service this module (and every other module) uses still goes through LocalStack
+on its usual port 4566.

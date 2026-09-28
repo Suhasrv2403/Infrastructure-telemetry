@@ -20,6 +20,15 @@ provider "aws" {
   skip_metadata_api_check     = true
   skip_requesting_account_id  = true
 
+  # LocalStack (and LocalStack-compatible emulators like Floci) serve S3 in path-style only
+  # (http://<host>/<bucket>/...), not the AWS SDK's virtual-hosted-style default
+  # (http://<bucket>.<host>/...). Without this, S3 API calls against LocalStack return HTTP 500
+  # for virtual-hosted-style requests, which the AWS SDK's retry/backoff logic turns into what
+  # looks like an indefinite hang rather than a clean error (confirmed via TF_LOG=DEBUG on a real
+  # `terraform test` run against P0-03's object_store module - not assumed). Real AWS accounts
+  # support both styles, so this only needs to be forced on for LocalStack.
+  s3_use_path_style = var.use_local_stack ? true : false
+
   endpoints {
     s3   = var.use_local_stack ? var.cloud_endpoints.s3 : null
     iam  = var.use_local_stack ? var.cloud_endpoints.iam : null
@@ -44,8 +53,9 @@ module "object_store" {
 }
 
 module "iam" {
-  source              = "../../modules/iam"
-  environment         = "dev"
-  tags                = local.common_tags
-  landing_bucket_arn  = module.object_store.landing_bucket_arn
+  source                  = "../../modules/iam"
+  environment             = "dev"
+  tags                    = local.common_tags
+  attach_ingest_s3_write  = true
+  landing_bucket_arn      = module.object_store.landing_bucket_arn
 }

@@ -39,7 +39,7 @@ run "defaults_are_localstack_first_and_never_pre_approved" {
       var.cloud_endpoints.ec2 == "http://localhost:4566" &&
       var.cloud_endpoints.kms == "http://localhost:4566" &&
       var.cloud_endpoints.logs == "http://localhost:4566" &&
-      var.cloud_endpoints.glue == "http://localhost:4566"
+      var.cloud_endpoints.glue == "http://localhost:4567"
     )
     error_message = "Default cloud_endpoints must all point at LocalStack's single edge port (4566)."
   }

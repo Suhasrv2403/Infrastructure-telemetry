@@ -2,12 +2,18 @@
 #
 # Standalone modules have no provider configuration of their own (see
 # infra/modules/networking/tests/networking.tftest.hcl for the full explanation) - this
-# provider block is the same LocalStack-shaped config used everywhere else in this repo. Every
-# assertion below targets literal configuration we passed in (bucket names, versioning status,
-# public-access-block booleans, policy JSON rendered locally) rather than cloud-generated IDs,
-# so every run here only needs `plan`, never LocalStack or a real account - except the one live
-# call this module makes (data.aws_caller_identity.current, for the KMS key policy), which is
-# overridden the same way networking.tftest.hcl overrides it.
+# provider block is the same LocalStack-shaped config used everywhere else in this repo. Most
+# assertions below target literal configuration we passed in (bucket names, versioning status,
+# public-access-block booleans) rather than cloud-generated IDs, so most runs only need `plan`,
+# never LocalStack or a real account, except the one live call this module makes
+# (data.aws_caller_identity.current, for the KMS key policy), which is overridden the same way
+# networking.tftest.hcl overrides it.
+#
+# One run is the exception either way: both_buckets_deny_insecure_transport uses
+# `command = apply` (see its own comment below) because its assertions read the TLS-deny
+# policy JSON, which embeds each bucket's arn - "known after apply" for a brand-new bucket even
+# though it's fully derivable from the (static) bucket name. That one run does need LocalStack
+# actually running; every other run only needs the aws provider plugin itself.
 
 provider "aws" {
   region                      = "us-east-1"
@@ -17,6 +23,14 @@ provider "aws" {
   skip_metadata_api_check     = true
   skip_requesting_account_id  = true
 
+  # Force path-style S3 addressing against LocalStack - virtual-hosted-style requests
+  # (http://<bucket>.localhost:4566/) return HTTP 500 from LocalStack, which the AWS SDK's
+  # retry/backoff logic turns into what looks like an indefinite hang on `terraform test`
+  # (confirmed via TF_LOG=DEBUG on a real run of this exact test file - not assumed). This test
+  # file always targets LocalStack, so the setting is unconditional here (unlike the dev/staging
+  # environments' provider blocks, which gate it on var.use_local_stack).
+  s3_use_path_style = true
+
   endpoints {
     s3   = "http://localhost:4566"
     iam  = "http://localhost:4566"
@@ -24,7 +38,7 @@ provider "aws" {
     ec2  = "http://localhost:4566"
     kms  = "http://localhost:4566"
     logs = "http://localhost:4566"
-    glue = "http://localhost:4566"
+    glue = "http://localhost:4567"
   }
 }
 
@@ -75,9 +89,14 @@ run "both_buckets_are_versioned_and_kms_encrypted" {
   }
 
   assert {
+    # rule is a TypeSet block (a bucket could in principle have more than one), so it isn't
+    # index-able with [0] - confirmed by running this test for real ("Cannot index a set
+    # value"). one() is the idiomatic way to pull the single element out of a set/list that's
+    # known to have exactly one item, which is always true here (main.tf only ever writes one
+    # rule block per bucket).
     condition = (
-      aws_s3_bucket_server_side_encryption_configuration.landing.rule[0].apply_server_side_encryption_by_default[0].sse_algorithm == "aws:kms" &&
-      aws_s3_bucket_server_side_encryption_configuration.warehouse.rule[0].apply_server_side_encryption_by_default[0].sse_algorithm == "aws:kms"
+      one(aws_s3_bucket_server_side_encryption_configuration.landing.rule).apply_server_side_encryption_by_default[0].sse_algorithm == "aws:kms" &&
+      one(aws_s3_bucket_server_side_encryption_configuration.warehouse.rule).apply_server_side_encryption_by_default[0].sse_algorithm == "aws:kms"
     )
     error_message = "Both buckets must be encrypted with a customer-managed KMS key, not SSE-S3."
   }
@@ -114,8 +133,37 @@ run "both_buckets_block_all_public_access" {
   }
 }
 
+# This is the second run in the whole P0-03 suite (after
+# both_buckets_are_versioned_and_kms_encrypted's sibling in networking) that needs a real
+# target to apply against - LocalStack is enough, no real account needed. Two attempts at
+# keeping it command = plan both failed for real: landing_tls_only/warehouse_tls_only embed
+# aws_s3_bucket.<x>.arn in their `resources` list, and a brand-new bucket's arn is "known after
+# apply" even though it's fully derivable from the (static) bucket name, which taints the whole
+# rendered policy document ("Unknown condition value"). override_resource with
+# override_during = plan still didn't help - identical failure, twice. Apply is the reliable
+# fix: LocalStack actually creates the buckets, so their arn is genuinely known.
+#
+# plan_options.target scopes the apply to just the two policy documents under test (which pulls
+# in their one dependency each, the bare aws_s3_bucket resources, and nothing else) - this run
+# never needs the KMS key, the Glue catalog database, versioning, SSE config, or public-access-
+# block, so it doesn't apply them. This was originally a hard requirement, not just tidiness:
+# LocalStack's Glue Data Catalog support is gated behind their paid Ultimate plan, so an
+# untargeted apply of this whole module hung - LocalStack silently never responded to the
+# aws_glue_catalog_database create call instead of erroring (confirmed by running this test for
+# real: it froze with the first three plan-only runs already passed, right where this run's
+# apply would have started creating the Glue database). glue now points at Floci instead (see
+# infra/environments/*/variables.tf's cloud_endpoints description), which does support Glue for
+# free, so this scoping is no longer strictly required - kept anyway, since there's no reason
+# for this run to create four resources it doesn't assert anything about.
 run "both_buckets_deny_insecure_transport" {
-  command = plan
+  command = apply
+
+  plan_options {
+    target = [
+      data.aws_iam_policy_document.landing_tls_only,
+      data.aws_iam_policy_document.warehouse_tls_only,
+    ]
+  }
 
   override_data {
     target = data.aws_caller_identity.current
