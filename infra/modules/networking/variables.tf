@@ -20,3 +20,9 @@ variable "tags" {
   default     = {}
   description = "Tags applied to every resource this module creates."
 }
+
+variable "flow_log_retention_days" {
+  type        = number
+  default     = 365
+  description = "CloudWatch Logs retention for VPC flow logs (checkov CKV2_AWS_11, CKV_AWS_338 wants >= 365)."
+}
