@@ -98,6 +98,24 @@ def natural_key(row: dict[str, Any]) -> NaturalKey:
     return (row["device_id"], row["device_ts_ms"], row["payload_hash"])
 
 
+def _event_time(row: dict[str, Any]) -> dt.datetime:
+    """The row's event time, parsed from `device_ts_ms` - never from an arrival/ingest
+    timestamp (invariant 4). Shared by partition_key() (device_class/date/hour/bucket path)
+    and device_hour_key() (the coarser (device_id, event_hour) grain P1-07's dirty-keys
+    tracking uses) so both derive "what hour did this happen in" the same way.
+
+    Raises InvalidEventTimestampError if device_ts_ms isn't a usable epoch-ms int - see that
+    error's docstring for why this module doesn't try to sanitize it itself (P1-05's job).
+    """
+    device_ts_ms = row.get("device_ts_ms")
+    if not isinstance(device_ts_ms, int) or isinstance(device_ts_ms, bool):
+        raise InvalidEventTimestampError(
+            f"row for device_id={row.get('device_id')!r} has device_ts_ms={device_ts_ms!r}, "
+            "not a usable epoch-ms int - timestamp sanity is P1-05's job, not merge.py's"
+        )
+    return dt.datetime.fromtimestamp(device_ts_ms / 1000, tz=dt.timezone.utc)
+
+
 def partition_key(row: dict[str, Any], *, bucket_count: int = DEVICE_BUCKET_COUNT) -> str:
     """The Stage 1 partition path for one row.
 
@@ -113,20 +131,32 @@ def partition_key(row: dict[str, Any], *, bucket_count: int = DEVICE_BUCKET_COUN
     Raises InvalidEventTimestampError if device_ts_ms isn't a usable epoch-ms int - see that
     error's docstring for why this module doesn't try to sanitize it itself (P1-05's job).
     """
-    device_ts_ms = row.get("device_ts_ms")
-    if not isinstance(device_ts_ms, int) or isinstance(device_ts_ms, bool):
-        raise InvalidEventTimestampError(
-            f"row for device_id={row.get('device_id')!r} has device_ts_ms={device_ts_ms!r}, "
-            "not a usable epoch-ms int - timestamp sanity is P1-05's job, not merge.py's"
-        )
-
-    event_time = dt.datetime.fromtimestamp(device_ts_ms / 1000, tz=dt.timezone.utc)
+    event_time = _event_time(row)
     bucket = device_bucket(row["device_id"], bucket_count=bucket_count)
     return (
         f"stage1_parsed/device_class={row['device_class']}/"
         f"event_date={event_time:%Y-%m-%d}/hour={event_time:%H}/"
         f"device_bucket={bucket:02d}/"
     )
+
+
+DeviceHourKey = tuple[Any, str]
+
+
+def device_hour_key(row: dict[str, Any]) -> DeviceHourKey:
+    """The (device_id, event_hour) key for one row - the coarser grain P1-07's dirty-keys
+    table (pipeline/stage1_parsed/dirty_keys.py) tracks recompute against (CLAUDE.md
+    invariant 5: "late data recomputes only dirty (device, hour) keys"), as opposed to
+    partition_key()'s full storage path.
+
+    `event_hour` is derived from device_ts_ms via _event_time(), the same event-time logic
+    partition_key() uses - never arrival time (invariant 4) - formatted as "YYYY-MM-DDTHH" in
+    UTC so it sorts and compares as a plain string.
+
+    Raises InvalidEventTimestampError under the same conditions as partition_key().
+    """
+    event_time = _event_time(row)
+    return (row["device_id"], f"{event_time:%Y-%m-%dT%H}")
 
 
 @dataclasses.dataclass(frozen=True)
