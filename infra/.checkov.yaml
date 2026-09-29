@@ -39,8 +39,16 @@
 # logging pipeline is actually designed, not as a bolt-on here.
 # CKV_AWS_144 ("Ensure S3 bucket has cross-region replication enabled"): out of scope for the
 # MVP (single region). Revisit before a real (non-LocalStack) apply per docs/decisions/0001.
-# CKV2_AWS_61 ("Ensure S3 bucket has a lifecycle configuration"): lifecycle configuration
-# (compaction/retention tiering) is explicitly P1-02's ticket, not P0-02/P0-03's.
+# CKV2_AWS_61 ("Ensure S3 bucket has a lifecycle configuration"): P1-02 added a lifecycle
+# configuration (aws_s3_bucket_lifecycle_configuration.landing, 30-day hot-then-archive to
+# GLACIER_IR) to the LANDING bucket only - that's this ticket's scope ("Stage 0 compaction and
+# retention tiering"). The WAREHOUSE bucket still has none; giving it a retention/tiering
+# policy is a separate decision (Iceberg table data has different access patterns than Stage 0
+# raw objects) and is out of scope here. This check ID stays in the global skip-check list
+# below only because of that - checkov 3.3.20 doesn't honor inline skips for this check ID
+# (see the file-level note above) and this skip-check list applies per-check-ID across the
+# whole scan, not per-resource, so it can't be narrowed to "only the warehouse bucket" from
+# here. Remove this line once the warehouse bucket gets its own lifecycle configuration.
 # CKV2_AWS_62 ("Ensure S3 buckets should have event notifications enabled"): event notifications
 # aren't needed until something consumes them (e.g. triggering Stage 1 parsing) - out of scope
 # for P0-03's layout/catalog goal.

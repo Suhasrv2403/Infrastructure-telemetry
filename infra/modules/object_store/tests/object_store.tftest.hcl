@@ -225,3 +225,49 @@ run "object_store_kms_key_has_rotation_enabled" {
     error_message = "The object-store KMS key must have automatic annual rotation enabled."
   }
 }
+
+# P1-02: landing bucket lifecycle (30-day hot-then-archive). Written to match this file's own
+# conventions but NOT run for real in the sandbox that authored it - no terraform/tofu binary
+# was available there (see infra/README.md's "Running this locally"). Please run
+# `terraform test` for real before trusting this run.
+run "landing_bucket_has_a_30_day_hot_then_archive_lifecycle_rule" {
+  command = plan
+
+  override_data {
+    target = data.aws_caller_identity.current
+    values = {
+      account_id = "123456789012"
+    }
+  }
+
+  assert {
+    condition = (
+      one(aws_s3_bucket_lifecycle_configuration.landing.rule).status == "Enabled" &&
+      one(one(aws_s3_bucket_lifecycle_configuration.landing.rule).transition).days == 30 &&
+      one(one(aws_s3_bucket_lifecycle_configuration.landing.rule).transition).storage_class == "GLACIER_IR"
+    )
+    error_message = "Landing bucket must transition objects to GLACIER_IR after 30 days (var.landing_hot_days default), per P1-02's done-when."
+  }
+}
+
+run "landing_bucket_lifecycle_transition_days_follow_the_landing_hot_days_variable" {
+  command = plan
+
+  variables {
+    environment      = "test"
+    tags             = { Project = "infrastructure-telemetry-test" }
+    landing_hot_days = 45
+  }
+
+  override_data {
+    target = data.aws_caller_identity.current
+    values = {
+      account_id = "123456789012"
+    }
+  }
+
+  assert {
+    condition     = one(one(aws_s3_bucket_lifecycle_configuration.landing.rule).transition).days == 45
+    error_message = "The lifecycle rule's transition days must follow var.landing_hot_days, not a hardcoded 30."
+  }
+}

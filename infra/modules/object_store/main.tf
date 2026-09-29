@@ -120,6 +120,53 @@ resource "aws_s3_bucket_policy" "landing" {
 }
 
 # ---------------------------------------------------------------------------
+# Landing bucket lifecycle - 30-day hot-then-archive tiering (P1-02, "Stage 0 compaction and
+# retention tiering"; resolves CKV2_AWS_61 for this bucket - see infra/.checkov.yaml).
+#
+# "Hot" means STANDARD (the storage class every object lands in via capture.py's put_object,
+# and via pipeline/stage0_landing/compaction.py's consolidated objects) for the first
+# var.landing_hot_days days after an object's own creation date, then a transition to
+# GLACIER_IR (Glacier Instant Retrieval) - deliberately NOT plain GLACIER or DEEP_ARCHIVE.
+# Reasoning: CLAUDE.md invariant 7 requires that replaying a closed window from Stage 0
+# reproduce production output exactly, and a backfill/replay job reading an old partition
+# shouldn't have to special-case "this object is archived, issue a restore request and wait
+# hours before it's readable." GLACIER_IR gives most of Glacier's cost savings over STANDARD
+# (meant for rarely-accessed data) while keeping every Stage 0 object - however old -
+# millisecond-retrievable, so Stage 0 stays usable as a replay source at any age without an
+# out-of-band restore step. Revisit the storage class (e.g. plain GLACIER once actual replay
+# frequency for old partitions is known) once there's real usage data to size that tradeoff by.
+#
+# Scope: applies bucket-wide (filter {} - no prefix scoping) since every object under both
+# raw/ (capture.py's small originals) and compacted/ (this ticket's consolidated objects) is
+# equally eligible to tier - compaction only ever ADDS objects under compacted/, it never
+# deletes or rewrites the small raw/ originals (invariant 1), so both kinds of object age and
+# transition independently here. A storage-class transition preserves an object's content
+# (unlike deletion), so this rule does NOT run into the invariant-1 tension compaction's own
+# code has to reconcile - see pipeline/stage0_landing/compaction.py's module docstring.
+#
+# NOT VERIFIED against real Terraform tooling: this sandbox has no terraform/tofu binary (see
+# infra/README.md's "Running this locally" note, itself unverified for the same reason).
+# Written by hand against this module's existing resource/tagging/variable conventions -
+# please run `terraform validate` and this module's `terraform test` suite for real before
+# trusting it further.
+# ---------------------------------------------------------------------------
+resource "aws_s3_bucket_lifecycle_configuration" "landing" {
+  bucket = aws_s3_bucket.landing.id
+
+  rule {
+    id     = "hot-${var.landing_hot_days}d-then-archive"
+    status = "Enabled"
+
+    filter {}
+
+    transition {
+      days          = var.landing_hot_days
+      storage_class = "GLACIER_IR"
+    }
+  }
+}
+
+# ---------------------------------------------------------------------------
 # Warehouse bucket - Stages 1-4 (Iceberg table data + metadata).
 # Layout convention (docs/decisions/0001-object-store-layout.md):
 #   s3://<warehouse bucket>/<table name>/data/... and /metadata/... (Iceberg-managed)
