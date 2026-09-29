@@ -1,0 +1,22 @@
+# Declarative detector configuration (P2-06 - "Detector plugin framework and findings
+# schema"). Names which registered detectors (see detectors/framework/registry.py's
+# @register_detector) are ACTIVE and their per-detector config parameters, following
+# catalog/signals.yaml's precedent of a real, loaded config file rather than code-level
+# registration alone.
+#
+# Resolved against the code registry by detectors/framework/config.py's active_detectors().
+# An `enabled: true` entry naming a detector with no matching @register_detector registration
+# is a configuration error at resolve time (UnregisteredDetectorError), not a silent skip - see
+# config.py's module docstring.
+#
+# config_status mirrors catalog/signals.yaml's own catalog_status flag: DRAFT means this file
+# lists only P2-06's one demonstration detector (all_gap_hour - see
+# detectors/framework/demo_all_gap_detector.py's own scope note: NOT real detection logic).
+# Real detectors land here as P2-08/P2-09/P2-10/P2-15 register them.
+config_status: DRAFT
+
+detectors:
+  - name: all_gap_hour
+    enabled: true
+    params:
+      min_gap_buckets: 1
