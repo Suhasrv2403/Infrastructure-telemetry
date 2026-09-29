@@ -15,8 +15,59 @@
 # Real detectors land here as P2-08/P2-09/P2-10/P2-15 register them.
 config_status: DRAFT
 
+# P2-08 ("Rule detectors v1") adds the four stall-class rule detectors below
+# (detectors/rules/charger_faults_v1.py). Same DRAFT status applies to them: every threshold in
+# `params` here is either lifted directly from catalog/signals.yaml's stated valid_range/enum
+# values, or this ticket's own documented judgment call (see charger_faults_v1.py's module and
+# per-function docstrings for exactly which is which, per threshold) - NONE of it has been
+# reviewed by a charger SME. Cabinet-class detectors (grid_voltage_v, transformer_temp_c,
+# cabinet_fault_code) are explicitly out of scope for P2-08 and are not declared here.
+
 detectors:
   - name: all_gap_hour
     enabled: true
     params:
       min_gap_buckets: 1
+
+  # Fires on any stall-fault_code==1001 ("module fault", per the generator's own, unconfirmed
+  # commentary label - see catalog/signals.yaml). fault_code is the catalog's own enum value,
+  # not a tuned threshold - a single occurrence is enough to fire.
+  - name: module_fault_v1
+    enabled: true
+    params:
+      fault_code: 1001
+
+  # Fires on stall_fault_code==1042 ("thermal") OR connector_temp_c over connector_temp_alarm_c.
+  # connector_temp_alarm_c (44.0) is THIS TICKET'S OWN judgment call, deliberately set just
+  # above catalog/signals.yaml's stated connector_temp_c valid_range max (43.7C) - see
+  # charger_faults_v1.py's DEFAULT_THERMAL_ALARM_C comment for the full reasoning. Not an SME-
+  # confirmed alarm setpoint.
+  - name: thermal_event_v1
+    enabled: true
+    params:
+      fault_code: 1042
+      connector_temp_alarm_c: 44.0
+
+  # Fires per session that reaches session_state=="fault" with no later session_state==
+  # "session_complete" in the same device-hour. fault_state/complete_state are the catalog's own
+  # session_state enum values, kept as config (not hardcoded) in case that enum is revised.
+  - name: session_failure_v1
+    enabled: true
+    params:
+      fault_state: fault
+      complete_state: session_complete
+
+  # Fires on a sustained, plateaued power drop within a charging session - the most judgment-
+  # heavy detector in this file. Every value below is this ticket's OWN reasoning, unvalidated
+  # against any real derate data (the fixture generator does not model derates at all) - see
+  # charger_faults_v1.py's module-level constant comments (DEFAULT_PEAK_DROP_FRACTION,
+  # DEFAULT_MIN_CONSECUTIVE_DERATED_READINGS, DEFAULT_MIN_PEAK_KW_FLOOR,
+  # DEFAULT_PLATEAU_TOLERANCE_KW) for the full, per-threshold reasoning and stated limitations.
+  - name: derate_v1
+    enabled: true
+    params:
+      peak_drop_fraction: 0.6
+      min_consecutive_readings: 3
+      min_peak_kw_floor: 20.0
+      plateau_tolerance_kw: 5.0
+      charging_state: charging
