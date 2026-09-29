@@ -310,3 +310,656 @@ supercharger_cabinet:
       source_ref: "_payload_hash: 'sha1:' + sha1(canonical json of fields)[:16]"
 
   "1.9.0": *supercharger_cabinet_fields
+
+# ==========================================================================================
+# Megapack / Powerpack (prep work for P2-13, "Megapack and Powerpack parsers, incl. cell-level
+# child table"; catalog sign-off itself is P2-14's job per catalog/README.md and Build
+# backlog.md - this block just gives P2-13/P2-14 something concrete to build against, the same
+# way the Supercharger block above gave P1-03/P1-04/P1-08 something concrete before real
+# Supercharger telemetry existed).
+# ==========================================================================================
+#
+# PROVENANCE: added directly on branch prep-megapack-powerpack-fixtures, NOT copied from an
+# earlier branch (unlike the Supercharger block above, which was copied verbatim from
+# P0-10-signal-catalog-v0 per that block's own PROVENANCE note). This is genuinely new content,
+# written by reading tests/fixtures/generators/megapack_powerpack.py's own source - the
+# SYNTHETIC fixture generator built alongside this catalog block on the same branch - not real
+# device payloads or real firmware documentation, because real Megapack/Powerpack payload/
+# firmware access doesn't exist yet (same situation the Supercharger block describes).
+#
+# STATUS: DRAFT, NOT REVIEWED (catalog_status: v0_draft_unreviewed below, shared with the
+# Supercharger block - there's only one catalog_status flag in this file. See that flag's use
+# above; nothing in this block has been reviewed either). Every canonical_name, unit,
+# description, valid_range and enum_values here is this generator/catalog author's own
+# reasonable-guess judgment about grid-scale battery storage telemetry - informed by publicly
+# known Megapack/Powerpack product facts (utility-scale battery + power conversion system,
+# pack-level dispatch, per-cell/per-cell-group BMS monitoring), not a real Tesla spec sheet or
+# firmware capture. Treat this exactly like the Supercharger block: a concrete starting point
+# for a firmware SME to correct (P2-14), not ground truth. Do not build real P2-13 parsers
+# against this file's semantics without that review.
+#
+# What "top firmware versions" means here (P2-13's done-when language): the generator only
+# models 2 firmware versions per product (megapack: 1.42.3, 1.44.0; powerpack: 1.19.2, 1.21.0)
+# - see DEFAULT_FIRMWARE in megapack_powerpack.py. As with the Supercharger block, "top N" is
+# therefore "all of them" here; no real-world firmware prevalence ranking is being claimed.
+#
+# THE CELL-LEVEL CHILD TABLE (the structurally new part P2-13's done-when calls out: "cell
+# table partitioned and compacted"):
+# Megapack and Powerpack are physically composed of many battery cells/cell groups, each
+# reporting voltage/temperature at a much coarser cadence than pack-level telemetry. This is
+# modeled below as two GENUINELY SEPARATE device classes per product, not extra pack-row
+# columns:
+#   - megapack / powerpack:            pack-level parent stream, keyed (device_id, device_ts_ms)
+#   - megapack_cell / powerpack_cell:  cell-level child stream, keyed (device_id, cell_id,
+#                                       device_ts_ms) - see the flagged merge-key gap below.
+# A cell-level message reuses its parent pack device's device_id and firmware_version (same
+# physical unit's BMS, a second stream) - only device_class differs. See
+# megapack_powerpack.py's own module docstring for the full reasoning, including why the child
+# stream's cell_count is NOT a literal per-cell count (real BMS telemetry realistically reports
+# at a cell-group/monitoring-channel granularity to bound volume - see that docstring's "Cell
+# count modeling" section) and why cell-level cadence is a fixed multiple
+# (CELL_REPORTING_RATIO=12) coarser than pack-level cadence.
+#
+# FLAGGED GAP for whoever builds P2-13's real Stage 1 table for the cell child stream (not
+# resolved by this prep ticket): CLAUDE.md invariant 2 states Stage 1's MERGE key is
+# (device_id, device_ts, payload_hash) - it says nothing about cell_id. In this generator's
+# synthetic output that 3-part key still happens to work, because payload_hash is computed over
+# each cell reading's own fields (which include cell_id), so two cells at the same
+# device_ts_ms get different payload_hash values and don't collide. But the cell child table's
+# intended, human-legible key is (device_id, cell_id, device_ts_ms) - relying on payload_hash
+# uniqueness as an implicit stand-in for an explicit cell_id key component is fragile and worth
+# a real design decision (docs/decisions/) once P2-13 actually builds this table for real.
+#
+# Firmware-identical schema note: same simplification as the Supercharger block - the generator
+# does not vary reading field names/types by firmware version within a product (only
+# timing/loss behavior via FIRMWARE_QUIRK_MULTIPLIER), so every firmware version within a
+# device_class gets an identical field list below via YAML anchors, same as above.
+#
+# Grid-side vs device-side ranges: grid_voltage_v/grid_frequency_hz are modeled as properties of
+# the grid a device is tied to, not of the device/product itself, so megapack and powerpack
+# deliberately share identical valid_range values for these two fields rather than inventing an
+# unjustified per-product difference - see megapack_powerpack.py's GRID_VOLTAGE_RANGE /
+# GRID_FREQUENCY_RANGE module constants.
+#
+# Renames from the generator's raw field names (same judgment-call convention as the
+# Supercharger block above):
+#   - megapack/powerpack "fault_code" -> canonical "megapack_fault_code" / "powerpack_fault_code"
+#     (each uses a different, product-specific code space - 4101/4220/4355 for megapack vs
+#     5101/5220 for powerpack - so a shared canonical "fault_code" column would silently
+#     conflate two different meanings, exactly the same reasoning the stall/cabinet
+#     fault_code rename above already uses.)
+#   - everything else (pack_soc_pct, pack_voltage_v, pack_current_a, pack_power_kw,
+#     dispatch_setpoint_kw, inverter_status, ambient_temp_c, max_cell_temp_c, min_cell_temp_c,
+#     grid_voltage_v, grid_frequency_hz, energy_charged_kwh, energy_discharged_kwh, cell_id,
+#     cell_voltage_v, cell_temp_c, balancing_active, device_ts_ms, payload_hash) is already
+#     reasonably named (unit-suffixed where physical) and kept as-is.
+#
+# Sign convention worth flagging for a reviewer: pack_power_kw and dispatch_setpoint_kw use
+# POSITIVE = charging (power flowing into the pack) / NEGATIVE = discharging (power flowing out
+# to the grid) - i.e. "net power into the pack", the convention this generator's own
+# _simulate_pack_readings function uses internally. This is the opposite sign convention from
+# some real BMS/PCS implementations (which use positive = discharge/export) - flagging
+# explicitly so a firmware SME reviewing this doesn't assume one convention or the other without
+# checking; get this confirmed against real firmware before treating sign as ground truth.
+
+megapack:
+  "1.42.3": &megapack_fields
+    pack_soc_pct:
+      canonical_name: pack_soc_pct
+      kind: signal
+      unit: percent
+      type: float
+      description: >
+        Pack-level state of charge. Modeled with headroom rather than a hard 0-100% band (real
+        BMS systems typically reserve margin for cell longevity) and driven by a simplified
+        peak-shaving dispatch cycle (charge overnight, discharge the evening peak) - see
+        _dispatch_profile in the generator.
+      valid_range: [5.0, 98.0]
+      source_ref: "_simulate_pack_readings: soc integrated from delta_soc_pct = actual_kw * interval_s/3600 / pack_energy_kwh * 100, clamped to SOC_RANGE"
+
+    pack_voltage_v:
+      canonical_name: pack_voltage_v
+      kind: signal
+      unit: volts
+      type: float
+      description: >
+        Pack-level DC bus voltage. Loosely coupled to pack_soc_pct (higher soc -> slightly
+        higher terminal voltage) plus noise around a per-device baseline drawn once - not an
+        independent physical simulation, same disclaimer style as the Supercharger block's
+        connector_temp_c/transformer_temp_c entries.
+      valid_range: [595.0, 905.0]
+      source_ref: "_simulate_pack_readings: voltage_v = base_voltage + (soc-50)/50 * (voltage_span*0.05) + rng.uniform(-1.5, 1.5), clamped near PRODUCT_SPECS['megapack'].pack_voltage_range"
+
+    pack_current_a:
+      canonical_name: pack_current_a
+      kind: signal
+      unit: amps
+      type: float
+      description: >
+        Pack-level DC current, derived (not independently simulated): pack_power_kw * 1000 /
+        pack_voltage_v. Same sign convention as pack_power_kw (positive = charging).
+      valid_range: [-3200.0, 3200.0]
+      source_ref: "_simulate_pack_readings: current_a = actual_kw * 1000 / voltage_v; approximate bound from pack_power_kw_max=1900 over the low end of pack_voltage_range"
+
+    pack_power_kw:
+      canonical_name: pack_power_kw
+      kind: signal
+      unit: kilowatts
+      type: float
+      description: >
+        Actual delivered pack power. POSITIVE = charging (power into the pack), NEGATIVE =
+        discharging (power out to the grid) - see this file's sign-convention note above. Can
+        differ from dispatch_setpoint_kw when curtailed (see inverter_status) or during a fault
+        (forced to 0.0).
+      valid_range: [-1900.0, 1995.0]
+      source_ref: "_simulate_pack_readings: actual_kw, from setpoint_kw = pack_power_kw_max * frac * rng.uniform(0.9, 1.05), then possibly curtailed or zeroed on fault"
+
+    dispatch_setpoint_kw:
+      canonical_name: dispatch_setpoint_kw
+      kind: signal
+      unit: kilowatts
+      type: float
+      description: >
+        Commanded power target from the (simulated) dispatch cycle, same sign convention as
+        pack_power_kw. Unlike pack_power_kw, NOT reduced by curtailment - it is the command, not
+        the delivered result, which is exactly what makes a curtailment episode visible
+        (dispatch_setpoint_kw far from pack_power_kw while inverter_status is "curtailed").
+      valid_range: [-1995.0, 1995.0]
+      source_ref: "_simulate_pack_readings: setpoint_kw, set before curtailment/fault are applied to actual_kw"
+
+    inverter_status:
+      canonical_name: inverter_status
+      kind: signal
+      unit: enum
+      type: enum
+      enum_values: [standby, charging, discharging, fault, curtailed]
+      description: >
+        Power-conversion-system (inverter/PCS) status at the time of this reading. "curtailed"
+        means a simulated grid-operator curtailment order reduced actual delivered power well
+        below dispatch_setpoint_kw while discharging - a grid-interconnection behavior the
+        Supercharger generator has no analog for.
+      valid_range: null
+      source_ref: "_simulate_pack_readings: inverter_status assignment (dispatch_profile state, or 'curtailed'/'fault' overrides)"
+
+    ambient_temp_c:
+      canonical_name: ambient_temp_c
+      kind: signal
+      unit: celsius
+      type: float
+      description: >
+        Modeled site ambient temperature (a site/weather property, not a device property - see
+        this file's shared-range note above; shared value range with powerpack). Drawn once per
+        device as a baseline, jittered per reading.
+      valid_range: [-22.0, 47.0]
+      source_ref: "_simulate_pack_readings: ambient_temp_c = ambient_base + rng.uniform(-2.0, 2.0), ambient_base from AMBIENT_TEMP_RANGE=(-20.0, 45.0)"
+
+    max_cell_temp_c:
+      canonical_name: max_cell_temp_c
+      kind: signal
+      unit: celsius
+      type: float
+      description: >
+        Pack-level rollup: hottest simulated cell temperature at this reading. Loosely coupled
+        to ambient_temp_c plus load (|pack_power_kw| / pack_power_kw_max) plus noise - not
+        derived from the cell-level child table's own cell_temp_c values, and not guaranteed
+        consistent with them (a known simplification of this generator, not a real BMS
+        rollup computation).
+      valid_range: [-22.0, 65.0]
+      source_ref: "_simulate_pack_readings: max_cell_temp_c = ambient_temp_c + load_frac*15.0 + rng.uniform(0.0, 3.0)"
+
+    min_cell_temp_c:
+      canonical_name: min_cell_temp_c
+      kind: signal
+      unit: celsius
+      type: float
+      description: >
+        Pack-level rollup: coldest simulated cell temperature at this reading. Same caveat as
+        max_cell_temp_c - not derived from the cell-level child table's own readings.
+      valid_range: [-24.0, 47.0]
+      source_ref: "_simulate_pack_readings: min_cell_temp_c = ambient_temp_c - rng.uniform(0.0, 2.0)"
+
+    grid_voltage_v:
+      canonical_name: grid_voltage_v
+      kind: signal
+      unit: volts
+      type: float
+      description: >
+        Grid-side AC voltage measured at the device's utility interconnection. Grid-side, not
+        device-side - deliberately shares its value range with powerpack (see this file's
+        grid-side-vs-device-side note above).
+      valid_range: [460.0, 500.0]
+      source_ref: "_simulate_pack_readings: round(rng.uniform(*GRID_VOLTAGE_RANGE), 1), GRID_VOLTAGE_RANGE=(460.0, 500.0)"
+
+    grid_frequency_hz:
+      canonical_name: grid_frequency_hz
+      kind: signal
+      unit: hertz
+      type: float
+      description: >
+        Grid-side AC frequency measured at the device's utility interconnection. Grid-side, not
+        device-side - shared range with powerpack, same as grid_voltage_v.
+      valid_range: [59.9, 60.1]
+      source_ref: "_simulate_pack_readings: round(rng.uniform(*GRID_FREQUENCY_RANGE), 3), GRID_FREQUENCY_RANGE=(59.9, 60.1)"
+
+    energy_charged_kwh:
+      canonical_name: energy_charged_kwh
+      kind: signal
+      unit: kilowatt_hours
+      type: float
+      description: >
+        Cumulative energy charged into the pack over the simulated window. Monotonically
+        non-decreasing (never reset in this generator, unlike Supercharger's per-session
+        energy_delivered_kwh, since a grid battery has no session boundary), accumulates only
+        while pack_power_kw > 0.
+      valid_range: [0.0, null]
+      source_ref: "_simulate_pack_readings: energy_charged_kwh += actual_kw * interval_s/3600 when actual_kw > 0; no fixed upper bound modeled"
+
+    energy_discharged_kwh:
+      canonical_name: energy_discharged_kwh
+      kind: signal
+      unit: kilowatt_hours
+      type: float
+      description: >
+        Cumulative energy discharged from the pack over the simulated window. Same monotonic,
+        no-reset modeling as energy_charged_kwh; accumulates only while pack_power_kw < 0.
+      valid_range: [0.0, null]
+      source_ref: "_simulate_pack_readings: energy_discharged_kwh += -actual_kw * interval_s/3600 when actual_kw < 0; no fixed upper bound modeled"
+
+    fault_code:
+      canonical_name: megapack_fault_code
+      kind: signal
+      unit: enum
+      type: int
+      enum_values: [0, 4101, 4220, 4355]
+      description: >
+        0 = no fault. Nonzero: this generator's own invented megapack fault categories - no real
+        meaning assigned, a product-specific code space kept separate from powerpack's (see this
+        file's rename note above). Needs firmware SME confirmation before any real meaning is
+        attached.
+      valid_range: null
+      source_ref: "_simulate_pack_readings: fault_code = rng.choice(PRODUCT_SPECS['megapack'].fault_codes[1:]) once fault_at is reached, else 0"
+
+    device_ts_ms:
+      canonical_name: device_ts_ms
+      kind: envelope_adjacent
+      unit: milliseconds_since_epoch
+      type: int
+      nullable: true
+      description: >
+        Device-reported reading timestamp (Unix epoch ms) as received, before Stage 1
+        timestamp-sanity checks. Not a physical signal - second component of Stage 1's merge
+        key (device_id, device_ts_ms, payload_hash), CLAUDE.md invariant 2. Can be null
+        (missing), 0 (epoch-default), or far in the future - injected messiness this generator
+        models (same categories as the Supercharger block, P0-07-style), not a real clock-fault
+        taxonomy.
+      valid_range: null
+      source_ref: "_apply_timestamp_corruption / _finalize_readings"
+
+    payload_hash:
+      canonical_name: payload_hash
+      kind: envelope_adjacent
+      unit: none
+      type: string
+      description: >
+        sha1-derived hash of this reading's own field values, used as the third component of
+        Stage 1's merge key so a verbatim retransmission of the same reading collapses to one
+        row. Not a physical signal.
+      valid_range: null
+      source_ref: "_payload_hash: 'sha1:' + sha1(canonical json of fields)[:16]"
+
+  "1.44.0": *megapack_fields
+
+megapack_cell:
+  "1.42.3": &megapack_cell_fields
+    cell_id:
+      canonical_name: cell_id
+      kind: signal
+      unit: none
+      type: string
+      description: >
+        Identifier for a BMS-reported cell monitoring channel within this device - NOT a literal
+        individual battery cell (see megapack_powerpack.py's module docstring, "Cell count
+        modeling"). Stable across sweeps for a given device; ranges from cg-0000 to
+        cg-<cell_count - 1> where cell_count is PRODUCT_SPECS['megapack'].cell_count (64 in this
+        generator - a deliberately smaller-than-real, tractable-for-fixtures number, not a real
+        per-unit channel count).
+      valid_range: null
+      source_ref: "_simulate_cell_readings: f'cg-{cell_idx:04d}' for cell_idx in range(spec.cell_count)"
+
+    cell_voltage_v:
+      canonical_name: cell_voltage_v
+      kind: signal
+      unit: volts
+      type: float
+      description: >
+        Per-channel cell voltage. Range modeled as LFP-chemistry-plausible for megapack
+        (publicly known as Tesla's newer grid-battery chemistry direction) - domain-plausible
+        flavor, not a verified chemistry claim. One channel per device is, with ~30% probability,
+        modeled as a persistent mild low-voltage outlier - cell-imbalance-shaped signal kept for
+        a possible future detector (P2-15), not required by this ticket.
+      valid_range: [2.5, 3.65]
+      source_ref: "_simulate_cell_readings: voltage_v = baselines[cell_idx] + rng.uniform(-0.02, 0.02), optionally -= rng.uniform(0.05, 0.15) for the imbalanced channel; clamped to cell_voltage_range=(2.5, 3.65)"
+
+    cell_temp_c:
+      canonical_name: cell_temp_c
+      kind: signal
+      unit: celsius
+      type: float
+      description: >
+        Per-channel cell temperature. Modeled as independent uniform noise per channel per
+        sweep (not coupled to pack-level max_cell_temp_c/min_cell_temp_c, which are computed
+        independently - see those fields' own descriptions) - a known simplification, not a
+        real thermal simulation.
+      valid_range: [-10.0, 55.0]
+      source_ref: "_simulate_cell_readings: temp_c = rng.uniform(*CELL_TEMP_RANGE), CELL_TEMP_RANGE=(-10.0, 55.0)"
+
+    balancing_active:
+      canonical_name: balancing_active
+      kind: signal
+      unit: bool
+      type: bool
+      description: >
+        Whether this generator models this channel's cell-balancing circuit as active at this
+        reading. Only ever true when cell_voltage_v is in the top ~15% of the product's cell
+        voltage range, and even then only ~30% of the time at that level - a rough, illustrative
+        approximation of real top-balancing behavior, not a real BMS balancing algorithm.
+      valid_range: null
+      source_ref: "_simulate_cell_readings: balancing_active = voltage_v > balance_threshold and rng.random() < 0.3, balance_threshold = v_lo + (v_hi - v_lo) * 0.85"
+
+    device_ts_ms:
+      canonical_name: device_ts_ms
+      kind: envelope_adjacent
+      unit: milliseconds_since_epoch
+      type: int
+      nullable: true
+      description: >
+        Device-reported cell-sweep timestamp (Unix epoch ms), shared by every cell_id reading in
+        the same sweep before Stage 1 timestamp-sanity checks. Not a physical signal - second
+        component of Stage 1's merge key (device_id, device_ts_ms, payload_hash) - see this
+        file's FLAGGED GAP note above about cell_id not being part of that key today. Can be
+        null, 0 (epoch-default), or far in the future - same injected messiness categories as
+        every other class in this catalog.
+      valid_range: null
+      source_ref: "_apply_timestamp_corruption / _finalize_readings"
+
+    payload_hash:
+      canonical_name: payload_hash
+      kind: envelope_adjacent
+      unit: none
+      type: string
+      description: >
+        sha1-derived hash of this cell reading's own field values (including cell_id), used as
+        the third component of Stage 1's merge key. Because it includes cell_id, two cells at
+        the same device_ts_ms get different payload_hash values in practice - see this file's
+        FLAGGED GAP note above for why that's a fragile substitute for an explicit cell_id key
+        component, not a real design decision.
+      valid_range: null
+      source_ref: "_payload_hash: 'sha1:' + sha1(canonical json of fields)[:16]"
+
+  "1.44.0": *megapack_cell_fields
+
+powerpack:
+  "1.19.2": &powerpack_fields
+    pack_soc_pct:
+      canonical_name: pack_soc_pct
+      kind: signal
+      unit: percent
+      type: float
+      description: >
+        Pack-level state of charge. Same modeling as megapack's pack_soc_pct (see that entry) -
+        headroom-bounded band, simplified peak-shaving dispatch cycle.
+      valid_range: [5.0, 98.0]
+      source_ref: "_simulate_pack_readings: soc integrated from delta_soc_pct = actual_kw * interval_s/3600 / pack_energy_kwh * 100, clamped to SOC_RANGE"
+
+    pack_voltage_v:
+      canonical_name: pack_voltage_v
+      kind: signal
+      unit: volts
+      type: float
+      description: >
+        Pack-level DC bus voltage. Same modeling as megapack's pack_voltage_v; powerpack is
+        modeled with a lower voltage range, reflecting it as the earlier, smaller-format
+        predecessor product (a plausible guess, not sourced from a real datasheet).
+      valid_range: [375.0, 605.0]
+      source_ref: "_simulate_pack_readings: voltage_v = base_voltage + (soc-50)/50 * (voltage_span*0.05) + rng.uniform(-1.5, 1.5), clamped near PRODUCT_SPECS['powerpack'].pack_voltage_range"
+
+    pack_current_a:
+      canonical_name: pack_current_a
+      kind: signal
+      unit: amps
+      type: float
+      description: >
+        Pack-level DC current, derived: pack_power_kw * 1000 / pack_voltage_v. Same sign
+        convention as pack_power_kw (positive = charging).
+      valid_range: [-670.0, 670.0]
+      source_ref: "_simulate_pack_readings: current_a = actual_kw * 1000 / voltage_v; approximate bound from pack_power_kw_max=250 over the low end of pack_voltage_range"
+
+    pack_power_kw:
+      canonical_name: pack_power_kw
+      kind: signal
+      unit: kilowatts
+      type: float
+      description: >
+        Actual delivered pack power. Same sign convention and curtailment/fault behavior as
+        megapack's pack_power_kw, scaled to powerpack's smaller pack_power_kw_max=250.
+      valid_range: [-250.0, 262.5]
+      source_ref: "_simulate_pack_readings: actual_kw, from setpoint_kw = pack_power_kw_max * frac * rng.uniform(0.9, 1.05), then possibly curtailed or zeroed on fault"
+
+    dispatch_setpoint_kw:
+      canonical_name: dispatch_setpoint_kw
+      kind: signal
+      unit: kilowatts
+      type: float
+      description: >
+        Commanded power target, same role as megapack's dispatch_setpoint_kw - not reduced by
+        curtailment, so it diverges from pack_power_kw during a curtailment episode.
+      valid_range: [-262.5, 262.5]
+      source_ref: "_simulate_pack_readings: setpoint_kw, set before curtailment/fault are applied to actual_kw"
+
+    inverter_status:
+      canonical_name: inverter_status
+      kind: signal
+      unit: enum
+      type: enum
+      enum_values: [standby, charging, discharging, fault, curtailed]
+      description: >
+        Power-conversion-system status, identical semantics to megapack's inverter_status.
+      valid_range: null
+      source_ref: "_simulate_pack_readings: inverter_status assignment (dispatch_profile state, or 'curtailed'/'fault' overrides)"
+
+    ambient_temp_c:
+      canonical_name: ambient_temp_c
+      kind: signal
+      unit: celsius
+      type: float
+      description: >
+        Modeled site ambient temperature - shared value range with megapack (site/weather
+        property, not a device property).
+      valid_range: [-22.0, 47.0]
+      source_ref: "_simulate_pack_readings: ambient_temp_c = ambient_base + rng.uniform(-2.0, 2.0), ambient_base from AMBIENT_TEMP_RANGE=(-20.0, 45.0)"
+
+    max_cell_temp_c:
+      canonical_name: max_cell_temp_c
+      kind: signal
+      unit: celsius
+      type: float
+      description: >
+        Pack-level rollup, same modeling and same caveat as megapack's max_cell_temp_c (not
+        derived from the cell-level child table's own readings).
+      valid_range: [-22.0, 52.5]
+      source_ref: "_simulate_pack_readings: max_cell_temp_c = ambient_temp_c + load_frac*15.0 + rng.uniform(0.0, 3.0)"
+
+    min_cell_temp_c:
+      canonical_name: min_cell_temp_c
+      kind: signal
+      unit: celsius
+      type: float
+      description: >
+        Pack-level rollup, same modeling and same caveat as megapack's min_cell_temp_c.
+      valid_range: [-24.0, 47.0]
+      source_ref: "_simulate_pack_readings: min_cell_temp_c = ambient_temp_c - rng.uniform(0.0, 2.0)"
+
+    grid_voltage_v:
+      canonical_name: grid_voltage_v
+      kind: signal
+      unit: volts
+      type: float
+      description: >
+        Grid-side AC voltage at the device's utility interconnection - shares its value range
+        with megapack (grid-side, not device-side - see this file's note above).
+      valid_range: [460.0, 500.0]
+      source_ref: "_simulate_pack_readings: round(rng.uniform(*GRID_VOLTAGE_RANGE), 1), GRID_VOLTAGE_RANGE=(460.0, 500.0)"
+
+    grid_frequency_hz:
+      canonical_name: grid_frequency_hz
+      kind: signal
+      unit: hertz
+      type: float
+      description: >
+        Grid-side AC frequency at the device's utility interconnection - shared range with
+        megapack, same as grid_voltage_v.
+      valid_range: [59.9, 60.1]
+      source_ref: "_simulate_pack_readings: round(rng.uniform(*GRID_FREQUENCY_RANGE), 3), GRID_FREQUENCY_RANGE=(59.9, 60.1)"
+
+    energy_charged_kwh:
+      canonical_name: energy_charged_kwh
+      kind: signal
+      unit: kilowatt_hours
+      type: float
+      description: >
+        Cumulative energy charged into the pack over the simulated window - same no-reset
+        modeling as megapack's energy_charged_kwh.
+      valid_range: [0.0, null]
+      source_ref: "_simulate_pack_readings: energy_charged_kwh += actual_kw * interval_s/3600 when actual_kw > 0; no fixed upper bound modeled"
+
+    energy_discharged_kwh:
+      canonical_name: energy_discharged_kwh
+      kind: signal
+      unit: kilowatt_hours
+      type: float
+      description: >
+        Cumulative energy discharged from the pack over the simulated window - same no-reset
+        modeling as megapack's energy_discharged_kwh.
+      valid_range: [0.0, null]
+      source_ref: "_simulate_pack_readings: energy_discharged_kwh += -actual_kw * interval_s/3600 when actual_kw < 0; no fixed upper bound modeled"
+
+    fault_code:
+      canonical_name: powerpack_fault_code
+      kind: signal
+      unit: enum
+      type: int
+      enum_values: [0, 5101, 5220]
+      description: >
+        0 = no fault. Nonzero: this generator's own invented powerpack fault categories, in a
+        separate code space from megapack's (5xxx vs 4xxx) so a shared canonical column never
+        conflates the two products' meanings - see this file's rename note above. No real
+        meaning assigned; needs firmware SME confirmation.
+      valid_range: null
+      source_ref: "_simulate_pack_readings: fault_code = rng.choice(PRODUCT_SPECS['powerpack'].fault_codes[1:]) once fault_at is reached, else 0"
+
+    device_ts_ms:
+      canonical_name: device_ts_ms
+      kind: envelope_adjacent
+      unit: milliseconds_since_epoch
+      type: int
+      nullable: true
+      description: >
+        Device-reported reading timestamp (Unix epoch ms), same semantics as megapack's
+        device_ts_ms entry - second component of Stage 1's merge key, can be null/epoch-default/
+        future per this generator's injected timestamp-corruption model.
+      valid_range: null
+      source_ref: "_apply_timestamp_corruption / _finalize_readings"
+
+    payload_hash:
+      canonical_name: payload_hash
+      kind: envelope_adjacent
+      unit: none
+      type: string
+      description: >
+        sha1-derived hash of this reading's own field values, third component of Stage 1's
+        merge key. Not a physical signal.
+      valid_range: null
+      source_ref: "_payload_hash: 'sha1:' + sha1(canonical json of fields)[:16]"
+
+  "1.21.0": *powerpack_fields
+
+powerpack_cell:
+  "1.19.2": &powerpack_cell_fields
+    cell_id:
+      canonical_name: cell_id
+      kind: signal
+      unit: none
+      type: string
+      description: >
+        Identifier for a BMS-reported cell monitoring channel within this device - same
+        modeling as megapack_cell's cell_id, NOT a literal individual battery cell. Ranges from
+        cg-0000 to cg-<cell_count - 1> where cell_count is
+        PRODUCT_SPECS['powerpack'].cell_count (24 in this generator - fewer channels than
+        megapack's 64, reflecting powerpack as the smaller, earlier product; see
+        megapack_powerpack.py's module docstring for why this ratio is a tractability-driven
+        choice, not a proportional real-spec scale-down).
+      valid_range: null
+      source_ref: "_simulate_cell_readings: f'cg-{cell_idx:04d}' for cell_idx in range(spec.cell_count)"
+
+    cell_voltage_v:
+      canonical_name: cell_voltage_v
+      kind: signal
+      unit: volts
+      type: float
+      description: >
+        Per-channel cell voltage. Range modeled higher than megapack's (3.0-4.2V vs 2.5-3.65V),
+        reflecting Tesla's publicly known shift toward LFP chemistry in its newer grid-battery
+        product line (megapack) versus the earlier powerpack generation - domain-plausible
+        flavor, not a verified chemistry claim for either product. Same ~30%-probability
+        persistent-outlier-channel modeling as megapack_cell.
+      valid_range: [3.0, 4.2]
+      source_ref: "_simulate_cell_readings: voltage_v = baselines[cell_idx] + rng.uniform(-0.02, 0.02), optionally -= rng.uniform(0.05, 0.15) for the imbalanced channel; clamped to cell_voltage_range=(3.0, 4.2)"
+
+    cell_temp_c:
+      canonical_name: cell_temp_c
+      kind: signal
+      unit: celsius
+      type: float
+      description: >
+        Per-channel cell temperature - same modeling and same independence-from-pack-rollup
+        caveat as megapack_cell's cell_temp_c.
+      valid_range: [-10.0, 55.0]
+      source_ref: "_simulate_cell_readings: temp_c = rng.uniform(*CELL_TEMP_RANGE), CELL_TEMP_RANGE=(-10.0, 55.0)"
+
+    balancing_active:
+      canonical_name: balancing_active
+      kind: signal
+      unit: bool
+      type: bool
+      description: >
+        Whether this generator models this channel's cell-balancing circuit as active - same
+        modeling as megapack_cell's balancing_active, threshold computed against powerpack's
+        own cell_voltage_range.
+      valid_range: null
+      source_ref: "_simulate_cell_readings: balancing_active = voltage_v > balance_threshold and rng.random() < 0.3, balance_threshold = v_lo + (v_hi - v_lo) * 0.85"
+
+    device_ts_ms:
+      canonical_name: device_ts_ms
+      kind: envelope_adjacent
+      unit: milliseconds_since_epoch
+      type: int
+      nullable: true
+      description: >
+        Device-reported cell-sweep timestamp (Unix epoch ms), same semantics as
+        megapack_cell's device_ts_ms entry, including the same FLAGGED GAP about cell_id not
+        being part of Stage 1's stated merge key.
+      valid_range: null
+      source_ref: "_apply_timestamp_corruption / _finalize_readings"
+
+    payload_hash:
+      canonical_name: payload_hash
+      kind: envelope_adjacent
+      unit: none
+      type: string
+      description: >
+        sha1-derived hash of this cell reading's own field values (including cell_id) - same
+        role and same FLAGGED GAP as megapack_cell's payload_hash entry.
+      valid_range: null
+      source_ref: "_payload_hash: 'sha1:' + sha1(canonical json of fields)[:16]"
+
+  "1.21.0": *powerpack_cell_fields

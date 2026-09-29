@@ -8,6 +8,14 @@ so parser and pipeline development isn't blocked on real telemetry capture (P0-0
   batched/out-of-order arrival, duplicate messages, missing/epoch-default/future timestamps,
   clock drift, and dropped-then-retried sequences.
 
+- `generators/megapack_powerpack.py` - PREP for P2-13 ("Megapack and Powerpack parsers, incl.
+  cell-level child table"): produces `megapack/`, `megapack_cell/`, `powerpack/` and
+  `powerpack_cell/` fixtures. Same messiness categories as the Supercharger generator, plus a
+  genuinely new structural element neither Supercharger class has - a cell-level child stream
+  (`*_cell`), a separate message/record type and cadence from its pack-level parent, not extra
+  pack-row columns. See that module's own docstring for the full design rationale (cell count
+  modeling, cell-reporting cadence, sign conventions).
+
 These are illustrative, not a substitute for the real arrival-shape/timestamp/lateness/
 duplicate profiling in P0-06..P0-09. Once P0-05 lands real captured payloads, real fixtures
 extracted from them should replace or supplement these for parser fixture tests (P1-04).
