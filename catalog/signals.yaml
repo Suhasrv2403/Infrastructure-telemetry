@@ -310,3 +310,254 @@ supercharger_cabinet:
       source_ref: "_payload_hash: 'sha1:' + sha1(canonical json of fields)[:16]"
 
   "1.9.0": *supercharger_cabinet_fields
+
+
+# ==========================================================================================
+# Signal catalog v0 -- Powerwall (prep for P3-03)
+# ==========================================================================================
+#
+# PROVENANCE: added as PREP work unblocking P3-03 ("Powerwall parsers and signal catalog"),
+# not as P3-03 itself - P3-03's own "done when" text (Build backlog.md) is "Top firmware
+# versions parse; catalog reviewed by firmware", neither of which this entry satisfies. This
+# block exists so P3-03 has a synthetic fixture generator and a starting-point catalog to
+# build real parsers and get real firmware-SME review against, the same relationship P0-10's
+# Supercharger catalog above has to P1-04.
+#
+# STATUS: DRAFT, NOT REVIEWED (catalog_status below still applies fleet-wide - see
+# catalog_status: v0_draft_unreviewed at the top of this file). Nobody with real Powerwall
+# firmware/product knowledge has looked at this block. Every canonical_name, unit, description,
+# valid_range and enum_values value below is inferred by reading the SYNTHETIC fixture generator
+# (tests/fixtures/generators/powerwall.py), not real device payloads, real firmware
+# documentation or a Tesla spec sheet, because no real Powerwall payload/firmware access exists
+# yet (P3-03 has not started). The generator's own module docstring is explicit that its signal
+# choices, ranges, mode/state enums and thresholds are the generator author's own domain
+# judgment, not sourced from anything real - treat this block as a firmware SME's starting
+# point to correct, not as ground truth. Do not build P3-03's real parsers against this file's
+# semantics without that review.
+#
+# "Top firmware versions" here means "all firmware versions the generator models" (3, in
+# DEFAULT_FIRMWARE), exactly the same "top N == all of them for now" situation the Supercharger
+# block above documents - no real-world firmware-prevalence ranking is being claimed.
+#
+# Scope note: pack/system-level telemetry only, one reading per device per interval - no
+# cell-level child table. Unlike the Megapack/Powerpack prep effort (a separate, parallel
+# worktree touching different files), P3-03's own done-when text does not call for cell-level
+# granularity for Powerwall, so none is modeled or catalogued here.
+#
+# Firmware-identical schema note: same simplification as the Supercharger block above - the
+# generator does not vary reading field names/types by firmware version, only timing/loss
+# behavior via FIRMWARE_QUIRK_MULTIPLIER. All three firmware versions below share an identical
+# field list via a YAML anchor.
+#
+# Sign conventions (own choice, not a documented convention - see the generator's module
+# docstring for the full reasoning):
+#   - battery_power_kw: positive = discharging (battery supplies the home), negative = charging.
+#   - grid_power_kw: positive = importing from the grid, negative = exporting to it. It is a
+#     DERIVED field, not independently modeled: site_load_kw = solar_power_kw + battery_power_kw
+#     + grid_power_kw by construction in the generator (verified in this generator's own unit
+#     tests) - so it is only ever as trustworthy as the other three signals it's computed from.
+#
+# valid_range values below marked "(analytic)" are the exact supremum/infimum reachable by the
+# generator's formula (matching how supercharger.py's own catalog entries were derived, e.g.
+# output_power_kw's 105.6 = 410*257.5/1000) - some are not actually hit in any given finite
+# sample run but are the true mathematical bound of the modeled formula. Values marked
+# "(empirical, multi-seed)" were derived by sweeping several seeds (tests/fixtures/generators/
+# powerwall.py's own value-generation logic makes a tight closed-form bound impractical because
+# of mode-dependent branching, e.g. grid_power_kw) and are a looser, sample-based bound rather
+# than a proven supremum - noted per-field below.
+#
+# device_class key is "powerwall" (parsers/powerwall/, DEVICE_CLASS in the generator).
+
+powerwall:
+  "23.44.10": &powerwall_fields
+    state_of_charge_pct:
+      canonical_name: state_of_charge_pct
+      kind: signal
+      unit: percent
+      type: float
+      description: >
+        Usable battery state of charge at the time of this reading, clamped to [0, 100] every
+        step as the generator integrates battery_power_kw over time against an assumed fixed
+        13.5 kWh nameplate capacity (NAMEPLATE_CAPACITY_KWH in the generator - own judgment
+        call, not a real capacity/degradation model).
+      valid_range: [0.0, 100.0]
+      source_ref: "_simulate_powerwall_stream: soc = min(100.0, max(0.0, soc + energy_delta_kwh / NAMEPLATE_CAPACITY_KWH * 100)), rounded to 2 decimals (analytic, by explicit clamp)"
+
+    battery_power_kw:
+      canonical_name: battery_power_kw
+      kind: signal
+      unit: kilowatts
+      type: float
+      description: >
+        Instantaneous battery power. Positive = discharging (battery supplying the home),
+        negative = charging (battery drawing power) - see this catalog block's header note on
+        sign conventions. Charging is capped at -battery_power_max_kw (default config value
+        5.0 kW); discharging is capped lower in practice (see valid_range) because every
+        discharge code path in the generator caps at either 3.0 kW (time_based_control's fixed
+        schedule, island-mode deficit coverage) or the modeled site load itself, which rarely
+        exceeds ~2.6 kW - an asymmetry that is a property of this generator's own formulas, not
+        a claim about real hardware's charge/discharge asymmetry.
+      valid_range: [-5.0, 3.0]
+      source_ref: "_simulate_powerwall_stream: mode/grid_status-dependent battery_power_kw assignment; -5.0 reached via self_powered charging capped at -battery_power_max_kw (analytic), +3.0 is the generator's own discharge cap constant, confirmed as the effective ceiling across a 10-seed x 75-device sweep (empirical, multi-seed) since no discharge branch's other terms actually reach that high"
+
+    solar_power_kw:
+      canonical_name: solar_power_kw
+      kind: signal
+      unit: kilowatts
+      type: float
+      description: >
+        Paired solar array's modeled instantaneous production. Zero outside a roughly 6am-6pm
+        daylight window; within it, a smooth midday-peaked curve scaled by this device's own
+        array size (drawn once per device from [solar_array_min_kw, solar_array_max_kw],
+        default [3.0, 10.0] kW - own judgment call giving the population varied array sizes)
+        and attenuated by a [0.6, 1.0] weather-noise multiplier.
+      valid_range: [0.0, 10.0]
+      source_ref: "_simulate_powerwall_stream: solar_power_kw = solar_capacity_kw * solar_factor * rng.uniform(0.6, 1.0); solar_factor in [0, 1]; solar_capacity_kw in [solar_array_min_kw, solar_array_max_kw] (analytic, matches config.solar_array_max_kw default 10.0)"
+
+    site_load_kw:
+      canonical_name: site_load_kw
+      kind: signal
+      unit: kilowatts
+      type: float
+      description: >
+        Modeled home consumption: a flat base plus a morning and a larger evening bump (each a
+        Gaussian in hour-of-day), times noise. Not an appliance-level load model - a smooth
+        stand-in curve only.
+      valid_range: [0.4, 2.65]
+      source_ref: "_simulate_powerwall_stream: site_load_kw = max(0.1, (0.5 + morning_peak + evening_peak) * rng.uniform(0.85, 1.15)); upper bound reflects that the morning (peak hour 7) and evening (peak hour 19) Gaussian terms never both near their individual maxima at the same hour-of-day, so the true ceiling is lower than naively summing both peak amplitudes (empirical, multi-seed, matches the evening-dominated analytic case ~(0.5+1.8)*1.15=2.645)"
+
+    grid_power_kw:
+      canonical_name: grid_power_kw
+      kind: signal
+      unit: kilowatts
+      type: float
+      description: >
+        Power imported from (positive) or exported to (negative) the grid. DERIVED, not
+        independently modeled: grid_power_kw = site_load_kw - solar_power_kw - battery_power_kw
+        whenever grid_status is grid_connected (forced to exactly 0.0 during transitioning and
+        islanded, since there is no grid interaction in either state by construction). Its own
+        range is only as trustworthy as the three signals it's computed from, and their
+        mode-dependent interaction (e.g. time_based_control can discharge while solar is still
+        producing) is what actually drives its extremes, not a simple sum of independent
+        bounds.
+      valid_range: [-9.5, 4.0]
+      source_ref: "_simulate_powerwall_stream: grid_power_kw = round(site_load_kw - solar_power_kw - battery_power_kw, 2) when grid_status == grid_connected, else 0.0 (empirical, multi-seed: observed [-9.47, 3.93] across a 10-seed x 75-device sweep, rounded outward for margin - no closed-form bound derived given the mode-schedule branching)"
+
+    backup_reserve_pct:
+      canonical_name: backup_reserve_pct
+      kind: signal
+      unit: percent
+      type: float
+      description: >
+        User-configured minimum charge to preserve for backup power. Modeled as fixed for a
+        given device's entire synthetic reading stream (drawn once per device), matching how
+        supercharger.py's output_voltage_v is fixed for a whole session - a real setting is
+        assumed to change rarely, not every reading.
+      valid_range: [5.0, 100.0]
+      source_ref: "_simulate_device: backup_reserve_pct = rng.uniform(config.backup_reserve_min_pct, config.backup_reserve_max_pct), rounded to 1 decimal; defaults [5.0, 100.0] (analytic)"
+
+    grid_status:
+      canonical_name: grid_status
+      kind: signal
+      unit: enum
+      type: enum
+      enum_values: [grid_connected, transitioning, islanded]
+      description: >
+        Grid connection state at the time of this reading. grid_connected is the default;
+        islanded marks a modeled grid-outage span during which the home runs off
+        battery/solar only; transitioning marks the single reading immediately before entering,
+        or immediately after leaving, an island event. Own invented state set loosely inspired
+        by real Powerwall app terminology, not a documented state machine - needs firmware/
+        product SME confirmation.
+      valid_range: null
+      source_ref: "_simulate_powerwall_stream: grid_status assignment from island_event/transition_indices"
+
+    operating_mode:
+      canonical_name: operating_mode
+      kind: signal
+      unit: enum
+      type: enum
+      enum_values: [self_powered, backup_only, time_based_control]
+      description: >
+        Modeled device operating mode, drawn once per device and held fixed for its whole
+        stream. self_powered charges from solar surplus and discharges to cover load deficits
+        (bounded by backup_reserve_pct); backup_only stays near full charge via a small
+        trickle, otherwise idle; time_based_control charges on a fixed off-peak window
+        (hour < 6) and discharges on a fixed on-peak window (16 <= hour < 21). A plausible
+        simplification of real Powerwall operating modes, not verified against the real
+        product - needs firmware/product SME confirmation.
+      valid_range: null
+      source_ref: "_simulate_device: operating_mode = rng.choice(OPERATING_MODES); _simulate_powerwall_stream: mode-dependent battery_power_kw branches"
+
+    battery_temp_c:
+      canonical_name: battery_temp_c
+      kind: signal
+      unit: celsius
+      type: float
+      description: >
+        Modeled battery pack temperature: a per-device "climate zone" baseline (own invented
+        set of 4 zones spanning roughly 4-27 C, deterministically assigned per device - see the
+        generator's module docstring; not a wire field, generator-internal only) plus diurnal
+        variation, a small load-coupled heating term, and noise. Not a thermal simulation.
+      valid_range: [0.0, 33.5]
+      source_ref: "_simulate_powerwall_stream: battery_temp_c = round(climate_baseline_c + 3*sin(...) + abs(battery_power_kw)*0.5 + rng.uniform(-1, 1), 1); climate_baseline_c in [4.0, 27.0] (CLIMATE_ZONES), analytic bound from each term's own min/max"
+
+    inverter_temp_c:
+      canonical_name: inverter_temp_c
+      kind: signal
+      unit: celsius
+      type: float
+      description: >
+        Modeled inverter temperature, derived from this same reading's battery_temp_c plus a
+        fixed offset and a term coupled to abs(battery_power_kw). Not an independent physical
+        simulation.
+      valid_range: [4.0, 45.5]
+      source_ref: "_simulate_powerwall_stream: inverter_temp_c = round(battery_temp_c + 5 + abs(battery_power_kw)*1.2 + rng.uniform(-1, 1), 1) (analytic, from each term's own min/max - the true joint extreme is rarely hit in any one finite sample, see battery_power_kw's own note on asymmetric reachability)"
+
+    fault_code:
+      canonical_name: powerwall_fault_code
+      kind: signal
+      unit: enum
+      type: int
+      enum_values: [0, 4001, 4002, 4003, 4004]
+      description: >
+        0 = no fault. Nonzero: simulated fault categories - 4001 (generator comment: "inverter
+        fault"), 4002 ("comms fault"), 4003 ("over-temp shutdown"), 4004 ("grid-disconnect
+        fault"). Distinct 4xxx code space from Supercharger's 1xxx/2xxx (stall) and 3xxx
+        (cabinet) fault codes, same "different fault_code fields use different, class-specific
+        code spaces" reasoning the Supercharger block above documents. These labels are the
+        generator author's commentary only, not a real Powerwall fault-code registry; real
+        meanings and real code values need firmware SME confirmation. While a fault is active,
+        battery_power_kw is forced to 0.0 for that span (1-6 readings).
+      valid_range: null
+      source_ref: "_simulate_powerwall_stream: fault_code_value = rng.choice(FAULT_CODES) if has_fault else 0; assigned per-reading via in_fault span check"
+
+    device_ts_ms:
+      canonical_name: device_ts_ms
+      kind: envelope_adjacent
+      unit: milliseconds_since_epoch
+      type: int
+      nullable: true
+      description: >
+        Device-reported reading timestamp (Unix epoch ms) as received, before Stage 1
+        timestamp-sanity checks (P1-05). Not a physical signal - second component of Stage 1's
+        merge key (device_id, device_ts_ms, payload_hash), CLAUDE.md invariant 2. Can be null,
+        0 (epoch-default), or far in the future - injected messiness the generator models
+        (same categories P0-07 profiles for Supercharger), not a real clock-fault taxonomy.
+      valid_range: null
+      source_ref: "_apply_timestamp_corruption / _finalize_readings"
+
+    payload_hash:
+      canonical_name: payload_hash
+      kind: envelope_adjacent
+      unit: none
+      type: string
+      description: >
+        sha1-derived hash of this reading's own field values, used as the third component of
+        Stage 1's merge key so a verbatim retransmission of the same reading collapses to one
+        row. Not a physical signal.
+      valid_range: null
+      source_ref: "_payload_hash: 'sha1:' + sha1(canonical json of fields)[:16]"
+
+  "24.4.2": *powerwall_fields
+  "25.12.1": *powerwall_fields
