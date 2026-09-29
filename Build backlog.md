@@ -74,7 +74,7 @@ The build is 65 epic-sized tickets across 5 phases, about 141 focused engineer-w
 | P2-10 | Telemetry-health detectors (correlated vs isolated dropout) | TH | Mid DS | 2 | P1-12 | Dropout attributed by firmware, region, carrier where known | To do |
 | P2-11 | Provisional-to-final window lifecycle and finding versions | S4 | Senior | 2 | P2-06 | Windows finalize after horizon; revisions recorded, never overwritten (lifecycle.py's finalize_due_windows() walks the store, finalizes any PROVISIONAL finding whose hour ended ≥ 24h ago (P0-13's recommended horizon, cited, not yet Gate-0-signed-off), idempotent, inclusive boundary tested; original provisional row proven byte-identical in history after finalization - see branch P2-11-window-lifecycle) | Done |
 | P2-12 | Backtest harness against RMA and tickets | DET | Senior DS | 3 | P2-06 | Precision and lead time reported per detector version | To do |
-| P2-13 | Megapack and Powerpack parsers, incl. cell-level child table | S1 | Mid + junior | 3 | P1-03 | Top firmware versions parse; cell table partitioned and compacted | To do |
+| P2-13 | Megapack and Powerpack parsers, incl. cell-level child table | S1 | Mid + junior | 3 | P1-03 | Top firmware versions parse; cell table partitioned and compacted (was blocked on no fixture generator existing for these device classes; that gap is now closed - see prep branch prep-megapack-powerpack-fixtures for a synthetic generator + draft v0_draft_unreviewed catalog, incl. a genuinely separate cell-level child stream and a flagged Stage 1 merge-key gap for whoever builds the real parsers. Real parser/canonicalization work itself is still To do) | To do |
 | P2-14 | Megapack and Powerpack onboarding | S2 | Senior | 2 | P2-13 | Catalog, completeness expectations and capacity signed off | To do |
 | P2-15 | Battery detectors v1 (cell imbalance, capacity fade, dispatch under-delivery) | DET | Senior DS | 3 | P2-14 | Backtested; reviewed by battery SMEs (Gate 2) | To do |
 
@@ -86,7 +86,7 @@ The build is 65 epic-sized tickets across 5 phases, about 141 focused engineer-w
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | P3-01 | Ingest capacity plan and autoscaling for Powerwall | INGEST | Senior SRE | 2 | P1-01 | Scaling policy sized from measured peak and surge rates | To do |
 | P3-02 | 10x reconnection surge load test | INGEST | Senior SRE + senior | 2 | P3-01 | Synthetic 72 h regional backfill ingested with zero loss | To do |
-| P3-03 | Powerwall parsers and signal catalog | S1 | Mid + junior | 3 | P1-03 | Top firmware versions parse; catalog reviewed by firmware | To do |
+| P3-03 | Powerwall parsers and signal catalog | S1 | Mid + junior | 3 | P1-03 | Top firmware versions parse; catalog reviewed by firmware (was blocked on no fixture generator existing for this device class; that gap is now closed - see prep branch prep-powerwall-fixtures for a synthetic generator + draft v0_draft_unreviewed catalog, sharded for 1M-device-scale generation, with a proven site-energy-balance invariant. Real parser work and the firmware review itself are still To do) | To do |
 | P3-04 | Staged Powerwall rollout (1% → 10% → 100%) | S0 | Senior | 4 | P3-02 | Each stage holds SLOs for a week before the next | To do |
 | P3-05 | Mode-aware expected counts from outage and VPP records | TH | Mid DS | 2 | P2-02 | Completeness uses event-mode expectations; lower bound otherwise | To do |
 | P3-06 | Scheduled reconciliation for cross-device outputs | PLAT | Senior | 2 | P2-11 | Cohort and mart recompute bounded in cost after an outage | To do |
