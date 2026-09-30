@@ -1,6 +1,6 @@
 # P0-12: Privacy and security review kickoff
 
-**Status:** In progress — Part 1 complete, Part 2 is preparation only (see banner below)
+**Status:** In progress — Part 1 complete, Part 2 is preparation only, Part 3 is a synthetic self-review (see banners below; none of this closes Part 2's "booked" requirement)
 **Date:** 2026-09-28
 **Ticket:** P0-12 (Build backlog.md, Phase 0, component GOV, owner EM)
 **Depended on by:** P3-12 "Privacy controls for residential data" (Phase 3, Gate 3)
@@ -170,3 +170,250 @@ Phase 1-2 work on the device-history dimension (which is what eventually makes r
 identifiable, per Part 1 row 4) will already be underway before Review A's nominal Phase 3
 dependency (P3-12) comes due, so the underlying architecture benefits from Review A's input
 earlier rather than later.
+
+---
+
+# Part 3 — Self-conducted assumption-based review (synthetic substitute, not a real review)
+
+> **⚠️ NOT A REAL REVIEW — READ BEFORE USING ANYTHING BELOW ⚠️**
+>
+> No real privacy counsel, security lead, or EM has looked at this section. It was produced by
+> an agent (this session), on explicit instruction from the project owner, as a synthetic
+> stand-in for Review A and Review B (Part 2) — the same way the rest of this pipeline runs on
+> synthetic fixtures instead of real residential data. It is one engineer's best-effort walk
+> through the same open questions Review A and Review B were designed to answer, using only
+> publicly-reasonable privacy/security judgment plus this repo's own stated facts (`CLAUDE.md`'s
+> invariants, Part 1's classification table, Build backlog.md's ticket text). It is **not** legal
+> advice, **not** a security assessment by anyone qualified to give one, and **not** a substitute
+> for Review A or Review B actually happening with real people in the room.
+>
+> **P0-12 must not be marked "Done" in Build backlog.md on the basis of this section.** Part 2's
+> "done when" — *residential and utility-site reviews booked* — is still unmet. This section only
+> gives P3-12 (and anyone else blocked on P0-12) something concrete to build against in the
+> meantime, with every assumption labeled as exactly that.
+
+## 3.0 Method
+
+For each open question raised by Review A's and Review B's agendas (Part 2, §2.1), this section
+gives one of three answers:
+
+- **Assumed answer** — a specific, reasoned proposal a real reviewer can accept, amend, or
+  reject, with the reasoning stated so the reviewer can attack the reasoning rather than start
+  from nothing.
+- **Partial answer** — an engineering-judgment default that is safe to build against *now*, but
+  paired with the specific legal/contractual/organizational fact that only a real reviewer can
+  supply.
+- **No responsible guess** — stated as such, with the reason a guess would be actively harmful
+  (e.g. inventing a fake jurisdiction or a fake contract term) rather than merely unconfirmed.
+
+## 3.1 Review A open questions (residential / Powerwall)
+
+### 3.1.a Regulatory surface (Review A decision 1; Part 1 §1.1)
+
+**No responsible guess.** Which consumer-privacy regime(s) apply (e.g. a US state consumer
+privacy statute, GDPR, or something else) depends on facts this repo does not contain and this
+session cannot obtain: the company's actual jurisdictions of incorporation and operation, where
+its residential customers are located, and whether it currently has in-house or outside privacy
+counsel. Guessing a specific regime here would be worse than saying nothing, because downstream
+work could silently start assuming (for example) that GDPR-style rules apply when they don't, or
+vice versa. **This stays fully blocked on real privacy counsel; no assumption substitutes.**
+
+### 3.1.b Tier assignments for residential rows (Review A decision 2)
+
+**Assumed answer:** keep Part 1's tier assignments as-is (rows 1, 2, 4-restricted, 5-residential,
+6-residential, 7-residential all **Restricted**). Reasoning: all six rows share the property that
+they identify, locate, or reveal behavior of a specific household, which is exactly Part 1 §1.1's
+Restricted definition, and none of them have a stated business need for broad internal access
+that would argue for loosening the tier. This is a low-risk assumption to build against — even a
+reviewer who disagrees on regulatory framing is unlikely to disagree that this data should start
+at the strictest internal tier and be *loosened* only with a documented reason, not the reverse.
+
+### 3.1.c Retention limits for residential-tier data (Review A decision 3; Part 1 §1.3 explicitly left open)
+
+**Assumed answer**, proposed as a concrete starting policy for P3-12 to implement and Review A to
+confirm or override:
+
+| Data | Proposed retention | Reasoning |
+| --- | --- | --- |
+| Stage 1–3b per-event / per-reading residential telemetry (row 1) | 13 months at full per-device grain, then delete the row-level record (an aggregate may be retained per 3.1.d) | 13 months (not 12) covers one full seasonal cycle plus a one-month buffer, which matches this pipeline's own reliability-analysis need to compare a device against the same calendar period a year prior; going further gains little reliability value while extending exposure. This is a reliability-engineering rationale, not a legal one — a real reviewer may set a shorter period for legal reasons that override it. |
+| Stage 3c device×day feature table (row 2) | 24 months at per-device grain, then aggregate/delete | Longer than raw readings because per-day features are the input to slower-moving analyses (e.g. multi-year battery degradation, which is a legitimate use Tesla/Tesla-like fleets track), but still bounded rather than indefinite. |
+| Device-history join table — device_id → account/address (row 4) | Retain the address/account linkage only while the device is on an active account, plus a 90-day grace period after account closure/decommission, then the linkage row is deleted (the bare `device_id` and its non-address technical history may persist) | The join is what makes every other table person-identifying (Part 1 row 4). Deleting the linkage promptly after it's no longer operationally needed is the single highest-leverage retention control in this whole table, because it downgrades everything joined through it back toward Confidential once it's gone. 90 days is an assumed grace period for RMA/billing wind-down, not a researched figure. |
+| Stage 4 residential-traceable findings (row 7, pre-aggregation) | Same as the row-1 telemetry they were computed from (13 months), then the finding is either re-expressed in aggregate form or deleted | Keeps the retention clock on findings tied to the retention clock on their source data rather than drifting independently. |
+
+**Explicit flag:** every number above (13 months, 24 months, 90 days) is this session's
+engineering-judgment default, not a legal minimum or maximum. Real privacy counsel may require a
+shorter period (e.g. if a specific regulation mandates deletion on request or a fixed cap) or
+permit a longer one; Review A must set the real number. What P3-12 can safely build now is the
+*mechanism* (a per-table, per-tier retention/purge job keyed on event time, consistent with
+invariant 4's "never partition by device_id" — the purge job should still operate over Stage
+partitions by time, then filter/delete by device_id within them) rather than the specific
+durations, which should be read from a config value the real review sets.
+
+### 3.1.d Minimum aggregation / cohort-size rule (Review A decision 4)
+
+**Assumed answer:** no Stage 4 mart or dashboard cell should be built from fewer than 20 distinct
+households for a given cohort/day (or cohort/period) grouping; cells below that threshold are
+suppressed or merged into a coarser cohort rather than shown. Reasoning: 20 is a commonly used,
+conservative small-cell-suppression threshold in comparable data-release practice (many public
+data releases use thresholds in the 5–20 range depending on sensitivity; this pipeline's data is
+on the more sensitive end because it includes inferred behavioral/occupancy signals per Part 1
+row 2, so this assumption picks the higher end of that common range rather than the lower one).
+**Flag:** this is a reasonable engineering default to implement now (P3-12 can build the
+suppression mechanism against a configurable threshold), but the actual number is a policy call
+Review A should confirm — some organizations use a materially different threshold depending on
+their risk tolerance and any applicable regulatory guidance, which again is not something this
+session can determine.
+
+### 3.1.e Who holds the device-history join, and access-review cadence (Review A decision 5)
+
+**Assumed answer:** the device-history join (row 4) should not be a table that any engineer with
+warehouse access can query ad hoc. Proposed design for P3-12:
+
+1. The join lives in a table/view reachable only through a named, Restricted-tier role (e.g.
+   `residential_identity_restricted`), distinct from the general analytics role.
+2. Access to that role requires an individual, named grant with a stated business
+   justification (not a team-wide default), consistent with Part 1's Restricted-tier
+   definition ("requires the strictest access tier").
+3. Every read of the joined (identity-bearing) form of the table is logged with who, when, and
+   the stated justification — this is an extension of Part 1's existing "audit logging" language
+   for Confidential/Restricted data, not a new requirement invented here.
+4. Access is reviewed quarterly, and any grant unused for 90 days is revoked and must be
+   re-requested with a fresh justification.
+5. No bulk export or notebook-level ad hoc join against this table; downstream consumers get
+   either a pre-aggregated result or a mediated query path that enforces the row-4 access
+   control server-side, not client-side.
+
+**Flag:** the specific cadence (quarterly, 90 days) and the exact role/grant mechanics are this
+session's proposal, built from ordinary least-privilege practice, not from any stated company
+policy (none is on file in this repo). Review A should confirm this matches how the company
+actually manages access grants elsewhere, or substitute its existing access-review process if one
+exists outside this repo.
+
+### 3.1.f Does invariant 8 satisfy the review's requirements (Review A decision 6)
+
+**Partial answer.** Invariant 8 ("No real residential data outside prod. Tests use synthetic
+fixtures in `tests/fixtures/`.") is necessary but, on its own, not sufficient for what Part 1 and
+this section describe as needed: it governs *where real data may exist* (prod only) but says
+nothing about retention (3.1.c), access tiering within prod (3.1.e), or aggregation before data
+leaves Stage 3 (3.1.d). Those are gaps in invariant coverage, not violations of invariant 8 as
+written. **Assumed answer:** Review A should either extend `CLAUDE.md`'s invariants to cover
+retention/access/aggregation once P3-12 lands, or explicitly decide those belong in P3-12's own
+design doc instead of `CLAUDE.md` — either is defensible, but the gap should be closed
+deliberately rather than left implicit. This is a documentation/process observation this session
+can make confidently from the repo's own text; it is not a legal or security determination.
+
+### 3.1.g Address-level data minimization (Part 1 row 5's flagged open question)
+
+**Assumed answer:** residential street-address text should not be stored in, or joinable from,
+any Stage 3+ table other than the device-history join table itself (row 4), and should never
+reach Stage 4 marts or dashboards in any form finer than a coarse geography needed for a stated
+downstream use. Concretely:
+
+- The device-history join table may hold (or reference, via an opaque foreign key into an
+  account/CRM system of record) the exact address, because that is its whole purpose and it is
+  already proposed as the most tightly access-controlled table in the pipeline (3.1.e).
+- Anything downstream of that join that needs geography (e.g. climate correlation for battery
+  performance, which is a plausible legitimate analytics need) should carry a coarsened
+  derivative only — e.g. a climate-zone code or a coordinate rounded to a grid cell on the order
+  of several kilometers, not the address or precise lat/long — computed once at the join and
+  never re-derivable back to the address from data outside the join table.
+- No new table should be added anywhere in the pipeline that stores raw address text as a
+  convenience join key; if a future ticket proposes that, it should be treated as a repeat of
+  this same open question, not a fresh one.
+
+**Flag:** this is a data-minimization design pattern (store precise data once, in the
+most-restricted place, and only ever pass coarsened derivatives downstream), not a claim about
+what any specific law requires. Review A may still require additional controls (e.g. a stricter
+grid-cell size, or barring geography entirely from Stage 4) — this is a floor this session
+believes is safe to build to now, not a ceiling.
+
+## 3.2 Review B open questions (utility / commercial-site)
+
+### 3.2.a Grid-security framing for row 3 (Review B decision 1)
+
+**Partial answer.** This session cannot determine whether formal critical-infrastructure or
+grid-security regulation (the kind of thing a real security/compliance function would check,
+e.g. whether any of this pipeline's data or systems fall under a grid-reliability regulatory
+regime) actually applies — that depends on facts about the company's interconnection
+relationships and jurisdiction that are not in this repo, and getting this wrong in either
+direction (assuming regulation applies when it doesn't, or the reverse) is the kind of mistake
+only a security/compliance specialist should make. **What is safe to assume now:** real-time
+output/status data from grid-connected assets (Megapack, Powerpack, and to a lesser extent
+Supercharger draw data) is operationally sensitive on ordinary security grounds regardless of
+whether formal critical-infrastructure regulation applies — it should not be exposed externally
+or to broad internal audiences without a stated need, consistent with Part 1 row 3's existing
+Confidential tier. **No responsible guess** on the specific regulatory classification or which
+team should formally own it (security vs. legal/commercial) — that determination is Review B's
+first agenda item precisely because it decides who leads the rest of the review, and this session
+has no basis to make that call.
+
+### 3.2.b Tier assignment for utility/commercial-site data (Review B decision 2)
+
+**Assumed answer:** keep Part 1's **Confidential** tier for row 3 and the commercial-site subset
+of rows 5 and 7 as-is. Reasoning: none of this data identifies a specific person on its own (per
+Part 1's own "reversible to a person/household" analysis), which is the dividing line this
+project's scheme uses between Confidential and Restricted, and nothing in Build backlog.md or
+`README.md` suggests a reason to diverge from that. Safe to build against now.
+
+### 3.2.c Residential-address-like installations reclassification rule (Review B decision 3)
+
+**Assumed answer:** at provisioning time, run the installation address through an
+address-type check (e.g. a standard postal/address-validation lookup that classifies a delivery
+point as residential vs. commercial — this is a common, already-solved problem in
+address-verification tooling, not something novel to invent here). Any installation whose address
+resolves as residential-type is automatically flagged and its data treated as row 1/2 (Restricted)
+until a human confirms otherwise, rather than defaulting to row 3's Confidential tier. This makes
+the fallback direction the safer one (stricter tier by default, loosened only on confirmation)
+rather than the reverse. **Flag:** this is a workable mechanism, not a policy decision — Review B
+should confirm this is the right trigger and that a human confirmation step (rather than a fully
+automated reclassification) is the right level of caution for what is likely to be a rare case.
+
+### 3.2.d Contractual terms with site hosts / utility partners (Review B decision 4)
+
+**No responsible guess.** This repo contains no site-host or utility-partner contracts, and
+inventing plausible-sounding contract terms would be actively misleading — a real contract could
+easily impose something this session would have no way to anticipate (e.g. a specific data
+retention cap, a prohibition on a specific downstream use, or a notification requirement on
+security incidents). **This stays fully blocked on whoever owns those commercial relationships**;
+no downstream ticket should assume any contractual constraint (or its absence) until Review B
+surfaces the actual terms.
+
+## 3.3 Handoff — what P3-12 (or any downstream ticket) can build against now
+
+**Safe to build against today** (engineering-judgment defaults from this section; each is
+explicitly overridable by the real Review A/B, but none require waiting for them to start work):
+
+1. Tier assignments as given in Part 1, unchanged (§3.1.b, §3.2.b).
+2. The device-history join (row 4) as a separately access-controlled table/role, with named
+   grants, audit logging, and quarterly access review (§3.1.e).
+3. A retention/purge mechanism parameterized by table, keyed on event time per invariant 4, with
+   *placeholder* durations of 13 months (raw residential telemetry), 24 months (device×day
+   features), and a 90-day post-closure grace period before deleting the device-history address
+   linkage (§3.1.c) — build the mechanism now, treat the numbers as a config value Review A will
+   set for real.
+4. A minimum-cohort-size suppression rule for Stage 4 outputs, parameterized (not hardcoded) at
+   an initial default of 20 households per cell (§3.1.d).
+5. Address minimization: no raw address outside the device-history join table; only coarsened
+   geography derivatives flow downstream of it (§3.1.g).
+6. An automated residential-type address check at Powerpack provisioning that defaults new,
+   ambiguous installations to the stricter (Restricted) tier pending human confirmation (§3.2.c).
+7. Extending `CLAUDE.md`'s invariants (or a P3-12-owned design doc) to explicitly cover
+   retention, access-tiering, and aggregation once the above lands, closing the gap noted in
+   §3.1.f.
+
+**Hard-blocked on the real reviews — do not build against any assumption here:**
+
+1. Which specific privacy/consumer-data regulation(s) actually apply to residential data
+   (§3.1.a) — no jurisdiction or entity information exists in this repo to found a guess on.
+2. Whether formal critical-infrastructure/grid-security regulation applies to utility-site data,
+   and therefore whether security or legal leads that review (§3.2.a).
+3. Any contractual data-handling term with a site host or utility partner (§3.2.d).
+4. The *exact* retention durations and cohort-size threshold (the mechanisms in items 3–4 above
+   are safe to build; the numbers 13 months / 24 months / 90 days / 20 households are this
+   session's defaults and must be treated as provisional until Review A sets the real values).
+
+If P3-12 is picked up before Review A/B happen, the most defensible path is: build items 1–7
+above as configurable, reviewable mechanisms (not hardcoded assumptions baked into schema or
+code that would be expensive to change), and leave the four hard-blocked items as explicit open
+config/policy inputs — not guesses — so the real review's output is a parameter change, not a
+re-architecture.
