@@ -20,3 +20,6 @@ venv/
 
 # OS
 .DS_Store
+
+# Parallel git worktrees used for per-ticket branches (see Build backlog.md workflow)
+.worktrees/
