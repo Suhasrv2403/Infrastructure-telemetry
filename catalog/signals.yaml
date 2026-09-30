@@ -2,12 +2,6 @@
 # Signal catalog v0 -- Supercharger stall & cabinet (P0-10)
 # ==========================================================================================
 #
-# PROVENANCE (P1-08): this file is copied verbatim from branch P0-10-signal-catalog-v0's
-# catalog/signals.yaml (worktree .worktrees/P0-10-signal-catalog-v0), not authored fresh in
-# this branch. Stage 2 canonicalization (pipeline/stage2_canonical/) reads it as-is. All
-# 'DRAFT, NOT REVIEWED' caveats below are that source file's own and still apply unchanged -
-# nothing here has been SME-reviewed by P1-08.
-#
 # STATUS: DRAFT, NOT REVIEWED. catalog_status below is the machine-readable flag; in words --
 # nobody with real Supercharger firmware knowledge has looked at this file yet. Every
 # canonical_name, unit, description and valid_range here is inferred by reading the SYNTHETIC

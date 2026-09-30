@@ -309,6 +309,11 @@ def _finalize_readings(
         fields = dict(raw["fields"])
         fields["device_ts_ms"] = device_ts_ms
         fields["payload_hash"] = _payload_hash(fields)
+        # Ground-truth event time (no drift, no corruption) - simulation-internal bookkeeping
+        # only, stripped in _emit_device_messages before the envelope is built. It exists so
+        # arrival can be anchored to when the reading really happened, independent of whatever
+        # is wrong with the device's own reported clock (see _emit_device_messages).
+        fields["__true_ts_ms"] = raw["__true_ts_ms"]
         finalized.append(fields)
         stats["readings_total"] += 1
         if issue:
@@ -368,10 +373,25 @@ def _emit_device_messages(
     for idx, batch in enumerate(batches):
         if not batch:
             continue
-        last_ts_ms = batch[-1]["device_ts_ms"] or batch[-1].get("device_ts_ms") or SYNTHETIC_NOW_MS
-        base_arrival_ms = last_ts_ms if isinstance(last_ts_ms, int) else SYNTHETIC_NOW_MS
+        # Arrival is anchored on the last reading's *ground-truth* event time, not on
+        # device_ts_ms: a device's self-reported clock can be missing, epoch-default, future-
+        # corrupted, or systematically drifted (see _finalize_readings/_apply_timestamp_
+        # corruption), none of which changes when the reading actually happened or when the
+        # resulting message physically reaches the ingest system. Deriving arrival from
+        # device_ts_ms previously did two things wrong: (a) a corrupted-to-0/missing last
+        # reading silently snapped arrival to the fixed SYNTHETIC_NOW_MS fallback, making an
+        # otherwise-ordinary batch look days late; (b) a future-corrupted last reading pushed
+        # arrival inappropriately far forward too. Anchoring on __true_ts_ms fixes both, and
+        # also means arrival_ts_ms - device_ts_ms now actually reflects the injected clock
+        # drift (previously the drift canceled out of that subtraction, see
+        # profiling/clock_quality/profiler.py's estimate_clock_drift docstring).
+        base_arrival_ms = batch[-1]["__true_ts_ms"]
+        clean_batch = [
+            {key: value for key, value in reading.items() if key != "__true_ts_ms"}
+            for reading in batch
+        ]
         envelope, issues = _make_envelope(
-            rng, device_class, firmware, device_id, site_id, batch, base_arrival_ms, config
+            rng, device_class, firmware, device_id, site_id, clean_batch, base_arrival_ms, config
         )
         if idx == outage_burst_index:
             burst_delay_s = rng.randint(config.outage_min_s, config.outage_max_s)
