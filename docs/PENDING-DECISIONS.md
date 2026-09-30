@@ -52,12 +52,13 @@ Template, for reference:
 | C: Block P3-12 entirely until a real privacy review is booked and held | 1 | 5 | 1 | 7 |
 
 **4. Pull the Trigger & Mitigate**
-- *The Choice:* **[awaiting your call - A, B, C, or your own numbers]**
-- *The Safety Net:* *(my suggestion, overwrite freely)* store retention/cohort-size as config
-  values (not hard-coded), so tightening or loosening them later is a one-line change and never
-  requires touching already-purged data.
-- *Next Step:* Once filled in, I'll write a real `docs/decisions/NNNN-...md` ADR encoding the
-  chosen numbers and wire P3-12's design against it.
+- *The Choice:* **A - adopt the agent's proposed defaults as-is** (13mo raw / 24mo features /
+  90d post-closure grace / min cohort n=20), decided by the user 2026-09-30.
+- *The Safety Net:* store retention/cohort-size as config values (not hard-coded), so
+  tightening or loosening them later is a one-line change and never requires touching
+  already-purged data.
+- *Next Step:* Write `docs/decisions/0002-residential-data-retention-access-tiers.md`
+  encoding these numbers as the real ADR P3-12 builds against. **Done** - see Resolved below.
 
 ---
 
@@ -90,13 +91,15 @@ commit `34990e3`: fixture generators for RMA, tickets, dispatch, outage, provisi
 | C: Do just one (P2-01, the smaller of the two) as a trial | 4 | 3 | 4 | 11 |
 
 **4. Pull the Trigger & Mitigate**
-- *The Choice:* **[awaiting your call - A, B, C]**
-- *The Safety Net:* *(my suggestion)* same as always - separate branches, nothing pushed or
-  merged, trivially discardable if the synthetic P0-11 shape turns out wrong.
-- *Next Step:* Once filled in with A or C, I'll open the relevant worktree(s) next turn.
+- *The Choice:* **A - start both P2-01 and P2-02 now**, same synthetic-substitute pattern as
+  this batch, decided by the user 2026-09-30.
+- *The Safety Net:* separate branches, nothing pushed or merged, trivially discardable if the
+  synthetic P0-11 shape turns out wrong.
+- *Next Step:* Open worktrees for both and build. **Done** - see Resolved below.
 
 ---
 
 ## Resolved
 
-*(none yet)*
+- **D1** (2026-09-30): Decided A. Encoded as `docs/decisions/0002-residential-data-retention-access-tiers.md`.
+- **D2** (2026-09-30): Decided A. Opened worktrees/branches for P2-01 (`P2-01-device-history-dimension`) and P2-02 (`P2-02-external-source-ingest`), both off `P0-11-data-access-requests` @ `34990e3`.
