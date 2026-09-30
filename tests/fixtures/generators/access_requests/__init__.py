@@ -16,4 +16,10 @@ own docstring says so and flags its riskiest assumption. When a real sample extr
 arrives for any of these five sources, hand it to the senior DS to validate schema and
 quality (per the P0-11 doc's own instruction), and expect this generator's assumed shape for
 that source to need correction.
+
+This package also holds a sixth module, `weather.py`, added for P2-02 ("ingest dispatch,
+outages, weather, RMA and tickets") - weather is NOT one of the five P0-11 sources above and
+has no corresponding section in the P0-11 access-request doc; see `weather.py`'s own ASSUMED
+SCHEMA docstring for why (short version: it likely comes from a commercial/public API, not an
+internal-system access request P0-11's template fits).
 """

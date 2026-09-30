@@ -29,6 +29,7 @@ an access request with no committed timeline.
 | `dispatch.py` | Field-service dispatch | one row per dispatch/site visit |
 | `outage.py` | Grid/site outage records | one row per outage |
 | `provisioning.py` | Device provisioning **history** | one row per provisioning *change event* — not a snapshot (see below) |
+| `weather.py` | Site-level weather observations | one row per **(site, hour)** — a dense grid, not an event feed (see below) |
 
 `_common.py` holds the constants and the device_id/site_id scheme shared by all five, copied
 by hand from `tests/fixtures/generators/supercharger.py` so records here can be joined against
@@ -58,6 +59,17 @@ reassignment), each with a strictly increasing `effective_ts` and no two rows fo
 device sharing a timestamp — so "the row current at time T" is always well-defined as the row
 with the largest `effective_ts <= T`. `provisioning.current_as_of()` implements that lookup
 directly, and `tests/unit/test_access_requests_provisioning_fixture_generator.py` tests it.
+
+## `weather.py` is not one of the five P0-11 sources
+
+Unlike the other five modules here, weather has no section in
+`docs/access-requests/P0-11-data-access-requests.md` - that document only ever named RMA,
+tickets, dispatch, outage and provisioning. Weather was added for **P2-02**'s own ticket
+wording ("ingest dispatch, outages, **weather**, RMA and tickets"); the most plausible real
+source is a commercial/public weather API rather than an internal system a P0-11-style access
+request would fit, so no such request was drafted. It's a dense hourly grid (one row per site
+per hour), not a sparse per-case event feed like this package's other five generators - see
+`weather.py`'s own ASSUMED SCHEMA docstring.
 
 ## Running a generator standalone
 

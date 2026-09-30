@@ -41,12 +41,12 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import hashlib
-import itertools
 import json
 import random
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable, Literal
+from typing import Any, Literal
 
 DeviceClass = Literal["supercharger_stall", "supercharger_cabinet"]
 
