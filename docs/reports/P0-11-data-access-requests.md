@@ -1,5 +1,5 @@
 <!--
-PROVENANCE: copied from branch `P0-11-data-access-requests` (commit e0bdf1c), path `docs/access-requests/P0-11-data-access-requests.md`.
+PROVENANCE: copied from branch `P0-11-data-access-requests` (commit 34990e3), path `docs/access-requests/P0-11-data-access-requests.md`.
 This branch is not yet merged into trunk. This file is a read-only snapshot
 for easy reading; the source branch remains the canonical, editable copy.
 Consolidated into docs/reports/ on trunk (P0-04-orchestrator-partition-model).

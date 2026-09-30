@@ -1,5 +1,5 @@
 <!--
-PROVENANCE: copied from branch `P0-09-device-retry-behavior-profiler` (commit 473db87), path `docs/profiling/P0-09-retry-behavior-test-plan.md`.
+PROVENANCE: copied from branch `P0-09-device-retry-behavior-profiler` (commit 08f3572), path `docs/profiling/P0-09-retry-behavior-test-plan.md`.
 This branch is not yet merged into trunk. This file is a read-only snapshot
 for easy reading; the source branch remains the canonical, editable copy.
 Consolidated into docs/reports/ on trunk (P0-04-orchestrator-partition-model).
@@ -11,7 +11,13 @@ Consolidated into docs/reports/ on trunk (P0-04-orchestrator-partition-model).
 **Owner:** Senior SRE + firmware
 **Done when:** Retry, buffer or drop behavior documented per firmware
 **Status of this document:** a proposed test plan for the humans who own this ticket to
-execute and adapt. It is not itself the "done when" result.
+execute and adapt. It is not itself the "done when" result. A further synthetic-proxy
+deliverable,
+[`docs/profiling/P0-09-per-firmware-behavior-report.md`](P0-09-per-firmware-behavior-report.md),
+breaks Part A's fleet-wide synthetic analysis down per firmware (closer to the ticket's
+literal wording), using the same detector and the same honesty caveats as below - it is
+still not a real fault-injection result, and does not change anything below or make this
+ticket done.
 
 ## Why this document exists, and what it is not
 
