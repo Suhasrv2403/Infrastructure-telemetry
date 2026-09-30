@@ -4,7 +4,13 @@
 **Owner:** Senior SRE + firmware
 **Done when:** Retry, buffer or drop behavior documented per firmware
 **Status of this document:** a proposed test plan for the humans who own this ticket to
-execute and adapt. It is not itself the "done when" result.
+execute and adapt. It is not itself the "done when" result. A further synthetic-proxy
+deliverable,
+[`docs/profiling/P0-09-per-firmware-behavior-report.md`](P0-09-per-firmware-behavior-report.md),
+breaks Part A's fleet-wide synthetic analysis down per firmware (closer to the ticket's
+literal wording), using the same detector and the same honesty caveats as below - it is
+still not a real fault-injection result, and does not change anything below or make this
+ticket done.
 
 ## Why this document exists, and what it is not
 
