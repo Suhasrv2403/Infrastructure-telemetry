@@ -7,7 +7,15 @@ so parser and pipeline development isn't blocked on real telemetry capture (P0-0
   fixtures, deliberately including the messiness the Phase 0 profilers are meant to measure:
   batched/out-of-order arrival, duplicate messages, missing/epoch-default/future timestamps,
   clock drift, and dropped-then-retried sequences.
+- `generators/access_requests/` - produces synthetic RMA, tickets, dispatch, outage and
+  provisioning-history records: a substitute for P0-11's real "sample extracts loaded" (real
+  access requires a human to send and follow up on the requests drafted in
+  `docs/access-requests/P0-11-data-access-requests.md`, which hasn't happened). See that
+  directory's own README for the full explanation and each schema's ASSUMED-SCHEMA caveat.
 
 These are illustrative, not a substitute for the real arrival-shape/timestamp/lateness/
-duplicate profiling in P0-06..P0-09. Once P0-05 lands real captured payloads, real fixtures
-extracted from them should replace or supplement these for parser fixture tests (P1-04).
+duplicate profiling in P0-06..P0-09, nor for the real sample extracts P0-11's access requests
+would eventually produce. Once P0-05 lands real captured payloads, real fixtures extracted
+from them should replace or supplement the Supercharger fixtures for parser fixture tests
+(P1-04); once P0-11's access requests are sent and answered, real sample extracts should
+replace or validate the access_requests fixtures the same way.
