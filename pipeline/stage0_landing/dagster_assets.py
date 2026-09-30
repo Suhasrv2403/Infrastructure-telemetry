@@ -33,12 +33,17 @@ from pipeline.stage0_landing.capture import ReconciliationError, capture_message
 from tests.fixtures.generators.supercharger import GeneratedFixtures, GeneratorConfig, generate
 
 # Covers the full arrival range the default-config generator produces (empirically confirmed:
-# ~2026-05-25 23:59 to ~2026-06-15 04:37 UTC for GeneratorConfig() defaults - some device
-# clocks are corrupted to read *future* timestamps, up to 14 days ahead, which also skews
-# their envelope's arrival_ts_ms since arrival is modeled as "shortly after the last reading in
-# the batch" - see supercharger.py's _emit_device_messages). Padded to whole days on each end.
+# ~2026-05-26 00:00 to ~2026-06-02 02:47 UTC for GeneratorConfig() defaults, a ~7-day window
+# driven by the session/cabinet-window simulation range - see supercharger.py's
+# _simulate_stall_device/_simulate_cabinet_device). Arrival is anchored on each batch's
+# ground-truth event time (supercharger.py's _emit_device_messages), independent of a device's
+# own reported clock, so a corrupted or drifted device_ts_ms no longer stretches this range -
+# see that function's comment for the bug this used to have. Bounds below are padded generously
+# past the actual range (extra partitions will simply be empty on materialize/backfill), not
+# trimmed tightly to it, so this doesn't need updating if the generator's config changes
+# slightly; re-measure if it ever looks wrong.
 STAGE0_PARTITIONS_START = "2026-05-25-00:00"
-STAGE0_PARTITIONS_END = "2026-06-16-00:00"  # exclusive
+STAGE0_PARTITIONS_END = "2026-06-04-00:00"  # exclusive
 
 stage0_landing_partitions = dg.HourlyPartitionsDefinition(
     start_date=STAGE0_PARTITIONS_START,
